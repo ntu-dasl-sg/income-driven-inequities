@@ -44,13 +44,10 @@ predisasterFun <- function(labour_income, other_income, avg_prod_cap, elasticity
 }
 
 
-  
-  
-
 #### 3. MEAN CONSUMPTION ####
 ##### 3.1 PHILIPPINES #####
-labour_income <- raster("/Users/jeancjw/Documents/00_Data/Income expenditure savings 2021/labour_income.tif")
-other_income <- raster("/Users/jeancjw/Documents/00_Data/Income expenditure savings 2021/other_income.tif")
+labour_income <- raster("/Users/jeancjw/Documents/00_Data/Income expenditure savings 2021/labour_income_PH.tif")
+other_income <- raster("/Users/jeancjw/Documents/00_Data/Income expenditure savings 2021/other_income_PH.tif")
 building_rast <- raster("/Users/jeancjw/Documents/00_Data/Buildings/buildingcount_90m.tif")
 
 # compute consumption0 
@@ -68,9 +65,9 @@ print(round(mean_consumption_PH,2))
 
 ##### 3.2 MANILA BAY, N14E120 #####
 extent_mask <- raster("/Users/jeancjw/Documents/00_Data/Coastal flood maps/Philippines/RCP45/Y2050/N14E120_Y2050_RP10000.tif") # any flood map for the required tile
-labour_income <- crop(raster("/Users/jeancjw/Documents/00_Data/Income expenditure savings 2021/labour_income.tif"), extent_mask)
-other_income <- crop(raster("/Users/jeancjw/Documents/00_Data/Income expenditure savings 2021/other_income.tif"), extent_mask)
-building_rast <- crop(raster("/Users/jeancjw/Documents/00_Data/Income expenditure savings 2021/other_income.tif"), extent_mask)
+labour_income <- crop(raster("/Users/jeancjw/Documents/00_Data/Income expenditure savings 2021/labour_income_PH.tif"), extent_mask)
+other_income <- crop(raster("/Users/jeancjw/Documents/00_Data/Income expenditure savings 2021/other_income_PH.tif"), extent_mask)
+building_rast <- crop(raster("/Users/jeancjw/Documents/00_Data/Buildings/buildingcount_90m.tif"), extent_mask)
 
 # compute consumption0
 consumption0 <- predisasterFun(labour_income, other_income, avg_prod_cap, elasticity)
@@ -86,4 +83,4 @@ mean_consumption_MANILA <- tot_consumption/num_buildings
 
 print(round(mean_consumption_MANILA,2))
 
-
+print(paste(mean_consumption_PH, "|", mean_consumption_MANILA))

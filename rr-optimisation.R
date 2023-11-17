@@ -11,16 +11,17 @@ library(dplyr)
 library(raster)
 library(readr)
 library(janitor)
+library(tidyverse)
 
 ## mean consumption of households in 2021, in either PH and Manila Bay area 
 ## mean consumption follows area of analysis
-# mean_consumption <- mean_consumption_PH
-mean_consumption <- mean_consumption_MANILA 
+mean_consumption <- mean_consumption_PH # 313.061 (000 PHP)
+# mean_consumption <- mean_consumption_MANILA # 415.926 (000 PHP)
 
 regions <- c("ARMM", "CAR", "NCR", "I", "II", "III", "IVA", "IVB", "IX", "V", "VI", "VII", "VIII", "X", "XI", "XII", "XIII")
-regionID <- 3 # current region we're working on 
+regionID <- 17 # current region we're working on 
 region <- regions[[regionID]]
-decile <- 1 # current decile we're working on 
+decile <- 10 # current decile we're working on 
 
 ##### 1.1 INPUTS & CONSTANTS #####
 
@@ -32,11 +33,11 @@ elasticity = 1.5 # 0.5-2.0 in literature, usually 1.2 or 1.5 in welfare loss mod
 building_count = 1 # one household
 
 ###### 1.1.2 READ INCOME & SAVINGS DATA ######
-filenames <- list.files(path = "/Users/jeancjw/Documents/00_Data/Income expenditure savings 2021",
-                        pattern = "IES.csv", 
-                        full.names = TRUE) # list file paths to income, expenditure and savings data
-
-FIES.data <- lapply(filenames, read_csv) # read in income and savings data for all 17 regions
+# filenames <- list.files(path = "/Users/jeancjw/Documents/00_Data/Income expenditure savings 2021",
+#                         pattern = "IES.csv", 
+#                         full.names = TRUE) # list file paths to income, expenditure and savings data
+# 
+# FIES.data <- lapply(filenames, read_csv) # read in income and savings data for all 17 regions
 
 ## this part is not really necessary ## 
 # region.names <- paste0("FIES_", region) # create variable names to assign csv file w income and savings
@@ -130,16 +131,16 @@ assign(varname, cbind( region = rep(region, length(df.vals)),
 
 
 #### 4. COMBINE OPTIMISED RESULTS ####
-optimRR_NCR<- rbind(optimres_NCR_1,
-                    optimres_NCR_2,
-                    optimres_NCR_3,
-                    optimres_NCR_4,
-                    optimres_NCR_5,
-                    optimres_NCR_6,
-                    optimres_NCR_7,
-                    optimres_NCR_8,
-                    optimres_NCR_9,
-                    optimres_NCR_10)
+optimRR_V<- rbind(optimres_V_1,
+                    optimres_V_2,
+                    optimres_V_3,
+                    optimres_V_4,
+                    optimres_V_5,
+                    optimres_V_6,
+                    optimres_V_7,
+                    optimres_V_8,
+                    optimres_V_9,
+                    optimres_V_10)
 
 
 #### 5. COMPUTE ASSET AND CONSUMPTION LOSSES ####
@@ -147,28 +148,30 @@ optimRR_NCR<- rbind(optimres_NCR_1,
 # after running rr-optimisation
 AL <- c()
 CL <- c()
-for (i in 1:nrow(optimRR_NCR)){
-  labour_income <- optimRR_NCR$lab_income[i]
-  damage_fraction <- optimRR_NCR$damage_fraction[i]
-  recovery_rate <- optimRR_NCR$optimal_rate[i]
-  replacement_cost <- optimRR_NCR$replacement_cost[i]
-  total_savings <- optimRR_NCR$savings[i]
+for (i in 1:nrow(optimRR_V)){
+  labour_income <- optimRR_V$lab_income[i]
+  damage_fraction <- optimRR_V$damage_fraction[i]
+  recovery_rate <- optimRR_V$optimal_rate[i]
+  replacement_cost <- optimRR_V$replacement_cost[i]
+  total_savings <- optimRR_V$savings[i]
   AL[i] <- assetlossFun(recovery_rate, damage_fraction, replacement_cost, discount_rate, t)
   CL[i] <- consumptionlossFun(labour_income, avg_prod_cap, damage_fraction, replacement_cost, recovery_rate, t, discount_rate, total_savings)
 }
 
 # join AL and CL to optimised RR and welfare loss results
-optimRR_NCR <- cbind(optimRR_NCR, as.data.frame(unlist(AL)),as.data.frame(unlist(CL)))
+optimRR_V <- cbind(optimRR_V, as.data.frame(unlist(AL)),as.data.frame(unlist(CL)))
 
 
-optimRR_NCR <- optimRR_NCR %>%
-  clean_names() %>%
-  rename(asset_loss = unlist_al, # final losses here are all discounted (AL, WL, CL)
+optimRR_V <- optimRR_V %>%
+  clean_names()
+
+optimRR_V <- optimRR_V %>%
+  dplyr::rename(asset_loss = unlist_al, # final losses here are all discounted (AL, WL, CL)
          consumption_loss = unlist_cl)
 
-optimRR_NCR$welfare_loss[optimRR_NCR$asset_loss == 0] <- 0 # if damage frac is 0, asset loss is 0 and welfare loss shld be 0.
+optimRR_V$welfare_loss[optimRR_V$asset_loss == 0] <- 0 # if damage frac is 0, asset loss is 0 and welfare loss shld be 0.
 
-head(optimRR_NCR)
+head(optimRR_V)
 
 #### 6. SAVE RESULTS ####
-write_csv(optimRR_NCR, file = "/Users/jeancjw/Documents/03_Results/results_NCR_N14E120.csv")
+write_csv(optimRR_V, file = "/Users/jeancjw/Documents/03_Results/results_V.csv")
