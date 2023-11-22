@@ -1,0 +1,504 @@
+---
+title: "Exposure income distributions"
+author: "Jeanette Choong"
+date: "2023-11-21"
+output: html_document
+---
+```{r setup, include=FALSE}
+library(raster)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(scales)
+library(data.table)
+```
+
+## ABOUT
+
+This document seeks to visualise how income levels influence flood exposure in the Philippines. 
+
+We look at this using a 1-in-100 year coastal flood hazard map for 2050 (with sea level rise) and 2020 (baseline scenario).
+
+## 1. SET UP
+
+### 1.1 LOAD DATA
+
+We start with the poverty line. According to the Philippine Statistical Authority, the poverty threshold for a household of five was 12,030 PHP/month in 2021.
+The international poverty line is US$2.15/day in 2017 PPP. Below are the conversions of the international and national poverty lines in thousand pesos per year for a household of five. 
+
+```{r poverty line}
+pov_line_natl <- 12030 * 12 /1000 # for a hh in 000 PHP/year 
+pov_line_intl <- 47.8 * 5 * 365 /1000 # for a hh in 000 PHP/year 
+
+paste(pov_line_natl, "|", pov_line_intl)
+```
+
+```{r rasters}
+flood_rast20 <- raster("/Users/jeancjw/Documents/00_Data/Coastal flood maps/Philippines/RCP45/Y2020/merged/merge_Y2020_RP100.tif") # for year 2020
+flood_rast <- raster("/Users/jeancjw/Documents/00_Data/Coastal flood maps/Philippines/RCP45/Y2050/merged/merge_Y2050_RP100.tif") # year 2050
+labour_income_rast <- raster("/Users/jeancjw/Documents/00_Data/Income expenditure savings 2021/Labour income rasters/labour_income_merged.tif")
+building_rast <- raster("/Users/jeancjw/Documents/00_Data/Buildings/buildingcount_90m.tif")
+```
+
+### 1.2 CONVERT RASTERS TO DATAFRAME
+
+```{r}
+# Get pixels where there are buildings
+flood_rast[is.na(building_rast)] <- NA
+labour_income_rast[is.na(building_rast)] <- NA
+
+
+# Convert rasters to points 
+flood_pts <- rasterToPoints(flood_rast)
+income_pts <- rasterToPoints(labour_income_rast)
+building_pts <- rasterToPoints(building_rast)
+
+
+# # Check if 'x' and 'y' coordinates are the same for every row
+# coordinates_match <- all.equal(flood_pts[, c("x", "y")], income_pts[, c("x", "y")]) # check building_pts as well. This code cannot compare 3 data frames.
+# 
+# if (is.logical(coordinates_match) && all(coordinates_match)) {
+#   print("Coordinates are the same for every row.")
+# } else {
+#   stop("Coordinates are not the same for every row. Check your data.")
+# }
+head(income_pts)
+```
+
+Since the coordinates for each row are the same in all three data frames, we can simply bind the three together without using merge(), because we don't really need the x y coords for this analysis. 
+
+```{r}
+data <- cbind(flood_pts[, c("x", "y", "layer")], income_pts[, "layer"], building_pts[, "layer"]) #'layer' is just the name of the col containing flood depth, income and building values in each df/matrix
+
+head(data) # check
+```
+Now we join building count data
+
+```{r}
+# Rename columns for clarity
+ colnames(data) <- c("x", "y", "depth", "income", "buildings")
+
+head(data) # check
+```
+
+Now we want to expand the data frame such that each row represents one building.
+
+```{r}
+data <- as.data.table(data) # convert matrix to df
+data <- data %>% 
+  select(-x,-y) # remove x y coordinates; we don't need this
+
+# Replicate rows c(income, depth) based on number of buildings 
+## note: requires data to be in data.table format; doesn't work with data frame
+data <- data[, .(income = rep(income, buildings), 
+                depth = rep(depth, buildings)), by = 1:nrow(data)] 
+
+data <- data %>% 
+  filter(depth <= 435.7778) %>% # some weird bug in R that's causing the max flood depth to appear as 20k even though the max is only 435.78cm
+  select(-nrow) # Don't need this column
+
+data # check data
+```
+
+## 2. PLOT PDF
+
+### 2.1 Y2050
+
+We start by categorising each building into poor and non-poor, based on which side of the poverty line they fall under.
+
+In the first case, we include even buildings that are unaffected.
+
+#### 2.1.1 NATIONAL POVERTY LINE
+
+```{r national pov line}
+data %>% 
+  mutate(income_category = ifelse(income <= pov_line_natl, "Below poverty line", "Above poverty line")) %>% 
+ggplot(aes(x = depth, fill = income_category))+
+  stat_density(alpha = 0.7, adjust = 14, position = "identity") + 
+  scale_fill_manual(values = c("Below poverty line" = "#294475", "Above poverty line" = "#cf5519")) + 
+  theme_bw()+
+  labs(x="Flood depth (cm)",
+       y= "Frequency", 
+       fill = "Income category") 
+```
+Since there are too many unaffected buildings, it's difficult to see any pattern amongst the affected buildings, so what we want to do next is to exclude buildings where flood depth = 0. 
+
+However, it's worth noting that fewer poor households are not exposed to floods compared to non-poor households. This could also be due to the way we have categorised poor and non-poor, meaning the bulk of the households fall under non-poor. 
+
+```{r national pov line - exposed only}
+data %>% 
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_natl, "Below poverty line", "Above poverty line")) %>% 
+ggplot(aes(x = depth, fill = income_category))+
+  stat_density(alpha = 0.7, adjust = 4, position = "identity") + 
+  scale_fill_manual(values = c("Below poverty line" = "#294475", "Above poverty line" = "#cf5519")) + 
+  theme_bw()+
+  labs(x="Flood depth (cm)",
+       y= "Frequency", 
+       fill = "Income category") 
+```
+
+This figure shows the probability distribution of flood exposure of households above and below the poverty line in the Philippines, for a 1-in-100 year coastal flood in 2050. 
+We can see here that generally, households living under the poverty line are more exposed at higher flood depths, which those living above the poverty line tend to face lower flood exposures
+
+
+#### 2.1.2 INTERNATIONAL POVERTY LINE
+
+```{r international pov line}
+data %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+ggplot(aes(x = depth, fill = income_category))+
+  stat_density(alpha = 0.7, adjust = 14, position = "identity") + 
+  scale_fill_manual(values = c("Below poverty line" = "#294475", "Above poverty line" = "#cf5519")) + 
+  theme_bw()+
+  labs(x="Flood depth (cm)",
+       y= "Frequency", 
+       fill = "Income category") 
+```
+
+```{r international pov line - exposed only}
+data %>% 
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+ggplot(aes(x = depth, fill = income_category))+
+  stat_density(alpha = 0.7, adjust = 4, position = "identity") + 
+  scale_fill_manual(values = c("Below poverty line" = "#294475", "Above poverty line" = "#cf5519")) + 
+  theme_bw()+
+  labs(x="Flood depth (cm)",
+       y= "Frequency", 
+       fill = "Income category") 
+```
+
+
+#### 2.1.3 INCOME QUANTILES
+
+The problem with categorising by poverty thresholds is that there tends to be only a very small population who fall under these thresholds. This means even the poor who aren't living under the poverty line are classified as non-poor, which may undermine the real exposure on this "in between" group. 
+
+```{r quantiles top bottom}
+data %>%
+  mutate(income_category = ifelse(income <= quantile(income, 0.2, na.rm = TRUE), "Bottom 20%",
+                                  ifelse(income <= quantile(income, 0.4, na.rm = TRUE), "Q2",
+                                         ifelse(income <= quantile(income, 0.6, na.rm = TRUE), "Q3",
+                                                ifelse(income <= quantile(income, 0.8, na.rm = TRUE), "Q4", "Top 20%"))))) %>%
+   mutate(income_category = factor(income_category, levels = c("Top 20%", "Q4", "Q3", "Q2", "Bottom 20%"))) %>% # reorder so that bottom 20% appears as the layer in front
+   filter(income_category %in% c("Bottom 20%", "Top 20%")) %>% # plot only lowest and highest incomes
+  ggplot(aes(x = depth, fill = income_category)) +
+  stat_density(alpha = 0.7, 
+               adjust = 14, 
+               position = "identity") +
+  scale_fill_manual(values = c("Bottom 20%" = "#294475", "Top 20%" = "#cf5519")) +
+  theme_bw() +
+  labs(
+    x = "Flood depth (cm)",
+    y = "Frequency",
+    fill = "Income category"
+  )
+```
+
+
+
+```{r quantiles top bottom - exposed only}
+data %>%
+  filter(depth > 0) %>%
+  mutate(income_category = ifelse(income <= quantile(income, 0.2, na.rm = TRUE), "Bottom 20%",
+                                  ifelse(income <= quantile(income, 0.4, na.rm = TRUE), "Q2",
+                                         ifelse(income <= quantile(income, 0.6, na.rm = TRUE), "Q3",
+                                                ifelse(income <= quantile(income, 0.8, na.rm = TRUE), "Q4", "Top 20%"))))) %>%
+  mutate(income_category = factor(income_category, levels = c("Top 20%", "Q4", "Q3", "Q2", "Bottom 20%"))) %>% # reorder so that bottom 20% appears as the layer in front
+   filter(income_category %in% c("Bottom 20%", "Top 20%")) %>% # plot only lowest and highest incomes
+  ggplot(aes(x = depth, fill = income_category)) +
+  stat_density(alpha = 0.7, adjust = 4, position= "identity") +
+  scale_fill_manual(values = c("Bottom 20%" = "#294475", "Top 20%" = "#cf5519")) +
+  theme_bw() +
+  labs(
+    x = "Flood depth (cm)",
+    y = "Frequency",
+    fill = "Income category"
+  )
+```
+
+Now we plot the same thing for all quantiles
+
+```{r all quantiles}
+data %>%
+  mutate(income_category = ifelse(income <= quantile(income, 0.2, na.rm = TRUE), "Q1",
+                                  ifelse(income <= quantile(income, 0.4, na.rm = TRUE), "Q2",
+                                         ifelse(income <= quantile(income, 0.6, na.rm = TRUE), "Q3",
+                                                ifelse(income <= quantile(income, 0.8, na.rm = TRUE), "Q4", "Q5"))))) %>%
+  ggplot(aes(x = depth)) +
+  stat_density(alpha = 0.5, 
+               adjust = 14, 
+               position = "identity") +
+  # scale_fill_manual(values = c("Q1" = "#294475", "Q2" = "#F0E442", "Q3" = "#56B4E9", "Q4" = "#CC79A7", "Q5" = "#cf5519")) +
+  theme_bw() +
+  labs(
+    x = "Flood depth (cm)",
+    y = "Frequency",
+    fill = "Income quantile"
+  ) + 
+  facet_wrap(~income_category, scales="fixed")
+```
+
+```{r}
+data %>%
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= quantile(income, 0.2, na.rm = TRUE), "Q1",
+                                  ifelse(income <= quantile(income, 0.4, na.rm = TRUE), "Q2",
+                                         ifelse(income <= quantile(income, 0.6, na.rm = TRUE), "Q3",
+                                                ifelse(income <= quantile(income, 0.8, na.rm = TRUE), "Q4", "Q5"))))) %>%
+  ggplot(aes(x = depth)) +
+  stat_density(alpha = 0.5, 
+               adjust = 4, 
+               position = "identity") +
+  # scale_fill_manual(values = c("Q1" = "#294475", "Q2" = "#F0E442", "Q3" = "#56B4E9", "Q4" = "#CC79A7", "Q5" = "#cf5519")) +
+  theme_bw() +
+  labs(
+    x = "Flood depth (cm)",
+    y = "Frequency",
+    fill = "Income quantile"
+  ) + 
+  facet_wrap(~income_category, scales="fixed")
+```
+This plot is interesting because Q2 - Q5 seem to have similar exposure levels, but Q1 shows a disproportionately high exposure to high flood levels. 
+
+### 2.2 Y2020
+
+```{r}
+# Get pixels where there are buildings
+flood_rast20[is.na(building_rast)] <- NA
+
+# Convert rasters to points 
+flood_pts20 <- rasterToPoints(flood_rast20)
+
+
+# Check if 'x' and 'y' coordinates are the same for every row
+coordinates_match <- all.equal(flood_pts20[, c("x", "y")], income_pts[, c("x", "y")]) # check building_pts as well. This code cannot compare 3 data frames.
+
+if (is.logical(coordinates_match) && all(coordinates_match)) {
+  print("Coordinates are the same for every row.")
+} else {
+  stop("Coordinates are not the same for every row. Check your data.")
+}
+```
+Since the coordinates for each row are the same in all three data frames, we can simply bind the three together without using merge(), because we don't really need the x y coords for this analysis. 
+
+```{r}
+data20 <- cbind(flood_pts20[, c("x", "y", "layer")], income_pts[, "layer"], building_pts[, "layer"]) #'layer' is just the name of the col containing flood depth, income and building values in each df/matrix
+
+head(data20) # check
+```
+Now we join building count data
+
+```{r}
+# Rename columns for clarity
+ colnames(data20) <- c("x", "y", "depth", "income", "buildings")
+
+head(data20) # check
+```
+
+Now we want to expand the data frame such that each row represents one building.
+
+```{r}
+data20 <- as.data.table(data20) # convert matrix to df
+data20 <- data20 %>% 
+  select(-x,-y) # remove x y coordinates; we don't need this
+
+# Replicate rows c(income, depth) based on number of buildings 
+## note: requires data20 to be in data.table format; doesn't work with data20 frame
+data20 <- data20[, .(income = rep(income, buildings), 
+                depth = rep(depth, buildings)), by = 1:nrow(data20)] 
+
+data20 <- data20 %>% 
+  filter(depth <= 435.7778) %>% # some weird bug in R that's causing the max flood depth to appear as 20k even though the max is only 435.78cm
+  select(-nrow) # Don't need this column
+
+data20 # check data20
+```
+#### 2.2.1 NATIONAL POVERTY LINE
+
+```{r national pov line}
+data20 %>% 
+  mutate(income_category = ifelse(income <= pov_line_natl, "Below poverty line", "Above poverty line")) %>% 
+ggplot(aes(x = depth, fill = income_category))+
+  stat_density(alpha = 0.7, adjust = 14, position = "identity") + 
+  scale_fill_manual(values = c("Below poverty line" = "#294475", "Above poverty line" = "#cf5519")) + 
+  theme_bw()+
+  labs(x="Flood depth (cm)",
+       y= "Frequency", 
+       fill = "Income category") 
+```
+Since there are too many unaffected buildings, it's difficult to see any pattern amongst the affected buildings, so what we want to do next is to exclude buildings where flood depth = 0. 
+
+However, it's worth noting that fewer poor households are not exposed to floods compared to non-poor households. This could also be due to the way we have categorised poor and non-poor, meaning the bulk of the households fall under non-poor. 
+
+```{r national pov line - exposed only}
+data20 %>% 
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_natl, "Below poverty line", "Above poverty line")) %>% 
+ggplot(aes(x = depth, fill = income_category))+
+  stat_density(alpha = 0.7, adjust = 4, position = "identity") + 
+  scale_fill_manual(values = c("Below poverty line" = "#294475", "Above poverty line" = "#cf5519")) + 
+  theme_bw()+
+  labs(x="Flood depth (cm)",
+       y= "Frequency", 
+       fill = "Income category") 
+```
+
+This figure shows the probability distribution of flood exposure of households above and below the poverty line in the Philippines, for a 1-in-100 year coastal flood in 2050. 
+We can see here that generally, households living under the poverty line are more exposed at higher flood depths, which those living above the poverty line tend to face lower flood exposures
+
+#### 2.2.2 INTERNATIONAL POVERTY LINE 
+
+```{r international pov line}
+data20 %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+ggplot(aes(x = depth, fill = income_category))+
+  stat_density(alpha = 0.7, adjust = 14, position = "identity") + 
+  scale_fill_manual(values = c("Below poverty line" = "#294475", "Above poverty line" = "#cf5519")) + 
+  theme_bw()+
+  labs(x="Flood depth (cm)",
+       y= "Frequency", 
+       fill = "Income category") 
+```
+
+```{r international pov line - exposed only}
+data20 %>% 
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+ggplot(aes(x = depth, fill = income_category))+
+  stat_density(alpha = 0.7, adjust = 4, position = "identity") + 
+  scale_fill_manual(values = c("Below poverty line" = "#294475", "Above poverty line" = "#cf5519")) + 
+  theme_bw()+
+  labs(x="Flood depth (cm)",
+       y= "Frequency", 
+       fill = "Income category") 
+```
+
+
+#### 2.2.3 INCOME QUANTILES
+
+The problem with categorising by poverty thresholds is that there tends to be only a very small population who fall under these thresholds. This means even the poor who aren't living under the poverty line are classified as non-poor, which may undermine the real exposure on this "in between" group. 
+
+```{r quantiles top bottom}
+data20 %>%
+  mutate(income_category = ifelse(income <= quantile(income, 0.2, na.rm = TRUE), "Bottom 20%",
+                                  ifelse(income <= quantile(income, 0.4, na.rm = TRUE), "Q2",
+                                         ifelse(income <= quantile(income, 0.6, na.rm = TRUE), "Q3",
+                                                ifelse(income <= quantile(income, 0.8, na.rm = TRUE), "Q4", "Top 20%"))))) %>%
+   mutate(income_category = factor(income_category, levels = c("Top 20%", "Q4", "Q3", "Q2", "Bottom 20%"))) %>% # reorder so that bottom 20% appears as the layer in front
+   filter(income_category %in% c("Bottom 20%", "Top 20%")) %>% # plot only lowest and highest incomes
+  ggplot(aes(x = depth, fill = income_category)) +
+  stat_density(alpha = 0.7, 
+               adjust = 14, 
+               position = "identity") +
+  scale_fill_manual(values = c("Bottom 20%" = "#294475", "Top 20%" = "#cf5519")) +
+  theme_bw() +
+  labs(
+    x = "Flood depth (cm)",
+    y = "Frequency",
+    fill = "Income category"
+  )
+```
+
+
+
+```{r quantiles top bottom - exposed only}
+data20 %>%
+  filter(depth > 0) %>%
+  mutate(income_category = ifelse(income <= quantile(income, 0.2, na.rm = TRUE), "Bottom 20%",
+                                  ifelse(income <= quantile(income, 0.4, na.rm = TRUE), "Q2",
+                                         ifelse(income <= quantile(income, 0.6, na.rm = TRUE), "Q3",
+                                                ifelse(income <= quantile(income, 0.8, na.rm = TRUE), "Q4", "Top 20%"))))) %>%
+  mutate(income_category = factor(income_category, levels = c("Top 20%", "Q4", "Q3", "Q2", "Bottom 20%"))) %>% # reorder so that bottom 20% appears as the layer in front
+   filter(income_category %in% c("Bottom 20%", "Top 20%")) %>% # plot only lowest and highest incomes
+  ggplot(aes(x = depth, fill = income_category)) +
+  stat_density(alpha = 0.7, adjust = 4, position= "identity") +
+  scale_fill_manual(values = c("Bottom 20%" = "#294475", "Top 20%" = "#cf5519")) +
+  theme_bw() +
+  labs(
+    x = "Flood depth (cm)",
+    y = "Frequency",
+    fill = "Income category"
+  )
+```
+
+Now we plot the same thing for all quantiles
+
+```{r all quantiles}
+data20 %>%
+  mutate(income_category = ifelse(income <= quantile(income, 0.2, na.rm = TRUE), "Q1",
+                                  ifelse(income <= quantile(income, 0.4, na.rm = TRUE), "Q2",
+                                         ifelse(income <= quantile(income, 0.6, na.rm = TRUE), "Q3",
+                                                ifelse(income <= quantile(income, 0.8, na.rm = TRUE), "Q4", "Q5"))))) %>%
+  ggplot(aes(x = depth)) +
+  stat_density(alpha = 0.5, 
+               adjust = 14, 
+               position = "identity") +
+  # scale_fill_manual(values = c("Q1" = "#294475", "Q2" = "#F0E442", "Q3" = "#56B4E9", "Q4" = "#CC79A7", "Q5" = "#cf5519")) +
+  theme_bw() +
+  labs(
+    x = "Flood depth (cm)",
+    y = "Frequency",
+    fill = "Income quantile"
+  ) + 
+  facet_wrap(~income_category, scales="fixed")
+```
+
+```{r}
+data20 %>%
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= quantile(income, 0.2, na.rm = TRUE), "Q1",
+                                  ifelse(income <= quantile(income, 0.4, na.rm = TRUE), "Q2",
+                                         ifelse(income <= quantile(income, 0.6, na.rm = TRUE), "Q3",
+                                                ifelse(income <= quantile(income, 0.8, na.rm = TRUE), "Q4", "Q5"))))) %>%
+  ggplot(aes(x = depth)) +
+  stat_density(alpha = 0.5, 
+               adjust = 4, 
+               position = "identity") +
+  # scale_fill_manual(values = c("Q1" = "#294475", "Q2" = "#F0E442", "Q3" = "#56B4E9", "Q4" = "#CC79A7", "Q5" = "#cf5519")) +
+  theme_bw() +
+  labs(
+    x = "Flood depth (cm)",
+    y = "Frequency",
+    fill = "Income quantile"
+  ) + 
+  facet_wrap(~income_category, scales="fixed")
+```
+
+## 3. PLOT CDF
+
+### 3.1 Y2050 
+
+```{r cdf 2050}
+data %>%  
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_natl, "Below poverty line", "Above poverty line")) %>% 
+   ggplot(aes(x=depth, linetype = income_category))+ 
+  # stat_ecdf(geom = "step", size = 0.5) +
+  geom_smooth(stat = "ecdf", method = "loess", color = "black", se = FALSE, size = 0.5) +  # Apply loess smoothing
+  labs(x = "Flood depth (cm)", 
+       y = "Cumulative frequency", 
+       linetype = "Income category") + 
+  # scale_color_manual(values = c("low income" = "#cf5529", "high income" = "#294475"))+
+   scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  theme_bw()
+```
+
+In this plot the curve for households at or below the poverty threshold is consistently below that of the curve for households above the poverty line. This suggests that across all observed flood depths, those living at or under the poverty threshold are generally more exposed to coastal floods. The gap between the two curves highlights this inequity in exposure. 
+
+### 3.2 Y2020 
+
+```{r cdf 2020}
+data20 %>%  
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_natl, "Below poverty line", "Above poverty line")) %>% 
+   ggplot(aes(x=depth, linetype = income_category))+ 
+  # stat_ecdf(geom = "step", size = 0.5) +
+  geom_smooth(stat = "ecdf", method = "loess", color = "black", se = FALSE, size = 0.5) +  # Apply loess smoothing
+  labs(x = "Flood depth (cm)", 
+       y = "Cumulative frequency", 
+       linetype = "Income category") + 
+  # scale_color_manual(values = c("low income" = "#cf5529", "high income" = "#294475"))+
+   scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  theme_bw()
+```

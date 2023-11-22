@@ -1,0 +1,332 @@
+---
+title: "Welfare loss plots"
+author: "Jeanette Choong"
+date: "2023-11-22"
+output: html_document
+---
+
+## ABOUT 
+
+These are the main welfare loss-related plots.
+1. Average annual asset and welfare losses for today and future climate
+
+```{r libraries, include = F, message = F, echo = F}
+library(raster)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(data.table)
+library(readr)
+library(janitor)
+library(scales)
+library(viridis)
+```
+
+
+## 1. AVG ANNUAL LOSSES
+
+Here we include the total losses accounting for the number of buildings in each pixel. 
+
+```{r AAL}
+WL50 <- raster("/Users/jeancjw/Documents/03_Results/EAD/PH/w_buildings/merged/WL_2050.tif")
+AL50 <- raster("/Users/jeancjw/Documents/03_Results/EAD/PH/w_buildings/merged/AL_2050.tif")
+WL20 <- raster("/Users/jeancjw/Documents/03_Results/EAD/PH/w_buildings/merged/WL_2020.tif")
+AL20 <- raster("/Users/jeancjw/Documents/03_Results/EAD/PH/w_buildings/merged/AL_2020.tif")
+
+AAL <- data.frame(year = c("2020", "2020", "2050", "2050"),
+                  loss_type = c("Asset loss", "Welfare loss","Asset loss", "Welfare loss"), 
+                  sum_loss = c(cellStats(AL20,"sum"),cellStats(WL20,"sum"),cellStats(AL50,"sum"),cellStats(WL50,"sum")))
+
+AAL
+```
+```{r AAL plot}
+ggplot(AAL, aes(x = factor(year), y = sum_loss/1000000, fill = loss_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Year", 
+       y = "Average Annual Losses (billion PHP)", 
+       fill = "Loss type") +
+  scale_fill_manual(values = c("Asset loss" = "#cf5529", "Welfare loss" = "#294475")) +
+  theme_bw()
+```
+
+```{r AAL difference}
+AAL_diff <- data.frame(year = c("2020", "2050"),
+                       difference = as.numeric(c("308531626", "342655178")),
+                       perc_difference = as.numeric(c("242.4255", "245.8712")))
+
+AAL_diff %>% 
+  ggplot(aes(x=year,y=difference/1000000))+
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Year", 
+       y = "Increase in average annual losses (billion PHP)")
+```
+```{r % increase year}
+AAL_diff %>% 
+  ggplot(aes(x=year,y=perc_difference))+
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Year", 
+       y = "Percentage difference in welfare and asset losses")
+```
+
+
+```{r AAL increase loss type}
+
+AAL_increase <- data.frame(loss_type = c("Asset loss", "Welfare loss"),
+           increase = as.numeric(c("12095092", "46218644")), 
+           perc_increase = as.numeric(c("9.503594", "10.60547")))
+
+AAL_increase
+AAL_increase %>% 
+  ggplot(aes(x = loss_type, y = increase/1000000, fill = loss_type))+
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Asset loss" = "#cf5529", "Welfare loss" = "#294475")) +
+  theme_bw() +
+  labs(x = element_blank(),
+       y = "Increase in avereage annual asset and welfare losses (billion PHP)", 
+       fill = "Loss type")
+```
+This plot shows the increase in asset losses and welfare losses from 2020 to 2050, where 2050 includes future sea level rise. 
+We can see that the increase in welfare losses is significantly larger than asset losses (approximately 4 times), suggesting the non-linearity of the impacts of sea level rise - and other disasters - on welfare. 
+
+```{r AAL increase loss type}
+AAL_increase %>% 
+  ggplot(aes(x = loss_type, y = perc_increase, fill = loss_type))+
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Asset loss" = "#cf5529", "Welfare loss" = "#294475")) +
+  theme_bw() +
+  labs(x = element_blank(),
+       y = "% Increase in average annual losses", 
+       fill = "Loss type")
+```
+
+## 2. FLOOD DEPTH VS INCOME
+
+Here, we want to plot flood depth vs income and colour in each grid with a palette that represents the corresponding magnitude of welfare losses. 
+We start by loading the constants. 
+
+### 2.1 CONSTANTS
+
+```{r constants}
+mean_consumption = 313.061 # mean consumption of the entire Philippines
+t = 0:20 # time period after disaster where we want to track recovery
+discount_rate = 0.10 # assume 20%; developing countries usually have rates between 7-25%, higher values reflect greater emphases on immediate needs.
+avg_prod_cap = 0.23 # average productivity of capital, taken from Walsh & Hallegatte (2029)'s paper on the Philippines
+elasticity = 1.5 # 0.5-2.0 in literature, usually 2.2 or 2.5 in welfare loss models
+building_count = 1 # one household
+```
+
+
+### 2.2 FUNCTIONS
+
+To do this, we need relevant functions used to compute welfare losses. 
+
+```{r functions}
+# source functions
+source("~/Documents/02_Code/functions.R")
+
+# to read damage function
+## We overwrite this function as we want both the flood depth and damage frac outputs; original function only takes damage frac.
+open_damage_function <- function(df_file){
+  df <- read.csv(file = df_file)
+  df_interp <- approx(unlist(df[1]), unlist(df[2]), seq(0, 10, by = 0.01)) # df[2]=wd, #df[2]=damagefrac
+  return(df_interp)
+}
+```
+
+Now we the damage function to a range of flood depths. 
+
+```{r}
+df.path <- "/Users/jeancjw/Documents/00_Data/Damage-depth function/global_dmgfn_res.csv"
+df <- open_damage_function(df.path)
+
+depth_df <- data.frame(depth = df$x, # flood depth (in m)
+                       df = df$y) %>%  # damage frac 
+  filter(!is.na(df))
+
+depth_df <- depth_df %>% 
+  mutate(depth = depth * 100) # convert m to cm
+
+depth_df
+```
+### 2.3  GENERATE INCOME AND SAVINGS
+
+Now we generate a sequence of incomes from 50 to 1000 with an increment of 50. 
+
+```{r income seq}
+labour_incomes <- seq(50,1000, by = 50)
+tot_incomes <- 100/69.8 * labour_incomes # labour income is 69.8% of total hh income (https://psa.gov.ph/statistics/income-expenditure/fies/node/1684059678)
+other_incomes <- 20.6/100 * tot_incomes # other income is 20.6% of total hh income
+```
+
+Now we generate savings data. Since savings are not a fixed percentage of income, we take a range based on the lowest savings rate to highest savings rate, where savings rate refers to the ratio of savings to total annual household income. This range is between 14% to 138%, so we approximate this to 10 to 150%
+
+We define fixed savings rates based on total incomes by interpolating between the range of savings rates. 
+
+```{r savings seq}
+# Define savings rates for each quantile (as percentages)
+savings_rates <- seq(10, 150, length.out = length(tot_incomes))
+
+# Calculate actual savings
+tot_savings <- tot_incomes * savings_rates/100
+```
+
+### 2.3.1 INCOME-SAVINGS DATA FRAME
+
+Now we make a data frame of labour income and total savings. 
+
+```{r}
+dt <- data.frame(labour_income = labour_incomes, total_savings = tot_savings)
+dt
+```
+
+## 3. GET WELFARE LOSSES
+
+### 3.1. PREDISASTER CALC
+
+```{r predisaster}
+predisaster_res <- Map(predisasterFun, labour_incomes, other_incomes, avg_prod_cap, elasticity) 
+# returns list containing the result of predisasterFun for each pair of corresponding labour_incomes and other_incomes
+```
+
+```{r}
+cbind(labour_incomes[15], other_incomes[15], data.frame(predisaster_res[[15]]))
+```
+
+```{r prediaster results}
+predisaster_res <- do.call(rbind, Map(function(labour_income, other_income, predisaster) { 
+  cbind(labour_income, other_income, data.frame(predisaster)) # bind labour income and other income to corresponding pre disaster results
+}, labour_incomes, other_incomes, predisaster_res)) # then do rbind of all 20 rows of results
+
+predisaster_res <- cbind(tot_savings, predisaster_res) # add total savings column
+predisaster_res
+```
+
+### 3.2 OPTIMISE RECOVERY RATES & COMPUTE WELFARE LOSS
+
+```{r optimise RR, warning=FALSE, message=FALSE}
+# should just run this in a script
+labour_income = predisaster_res$labour_income[7]
+total_savings = predisaster_res$tot_savings[7]
+replacement_cost = predisaster_res$replacement_cost[7]
+income0 = predisaster_res$income0[7]
+consumption0 = predisaster_res$consumption0[7]
+utility0 = predisaster_res$utility0[7]
+
+# set range of recovery rates
+lower_bound <- 0
+upper_bound <- 4 # upper bound needs to be adjusted dynamically such that consumption_t > 0 (i.e. utility losses not Inf or NaN)
+
+
+# Loop over the rows in the data frame
+damage_fractions <- depth_df$df
+
+#initialise results df
+results <- data.frame(damage_fraction = numeric(length(damage_fractions)),
+                      optimal_rate = numeric(length(damage_fractions)), 
+                      utility_loss = numeric(length(damage_fractions)))
+
+# Loop over damage fractions and find optimal rate that minimises utility losses
+for (i in seq_along(damage_fractions)){
+  damage_fraction <- damage_fractions[i]
+  
+  while (TRUE) {
+    # Define the objective function using the current upper_bound
+    objectiveFun <- function(recovery_rate){
+      welfarelossFun(labour_income, avg_prod_cap, damage_fraction, recovery_rate, t, replacement_cost, discount_rate, total_savings, mean_consumption)
+    }
+    
+    # Perform optimization with the current upper_bound
+    optimal_rate <- optimise(objectiveFun, interval = c(lower_bound, upper_bound))
+    
+    # Calculate welfare losses using the obtained optimal_rate
+    welfare_loss <- objectiveFun(optimal_rate$minimum)
+    
+    # Check if the utility loss is NaN
+    if (!is.nan(welfare_loss)) {
+      results[i,] <- c(damage_fraction, optimal_rate$minimum, welfare_loss)
+      break  # Exit the loop if a valid utility loss is found
+    } else {
+      upper_bound <- upper_bound - 0.01  # Adjust the upper_bound if welfare loss is NaN
+      # cat("Adjusting upper_bound to:", upper_bound, "\n")
+    }
+  }
+}
+
+# change X in rX to 1-20
+r7<- cbind(income = rep(labour_income, length (results$damage_fraction)), results)
+
+```
+
+Now we combine all results
+
+```{r bind results}
+# combine all results
+results <- rbind(r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11,r12,r13,r14,r15,r16,r17,r18,r19,r20)
+# join to flood depth
+results <- results %>% 
+  left_join(depth_df, by = c("damage_fraction" = "df"))
+
+# join to other data like total savings, replacement cost etc, which are needed for calculation of asset and consumption losses
+results <- results %>% 
+  left_join(predisaster_res, by = c("income" = "labour_income"))
+
+results <- results %>% 
+  rename(total_savings = tot_savings) # rename total savings so I can put it in the function easily
+```
+
+Next, we compute asset and consumption losses. 
+
+### 3.3. COMPUTE ASSET AND CONSUMPTION LOSSES
+
+```{r AL & CL}
+AL <- c() # empty vector for asset losses
+CL <- c() # empty vector for consumption losses
+for (i in 1:nrow(results)){
+  labour_income <- results$income[i]
+  damage_fraction <- results$damage_fraction[i]
+  recovery_rate <- results$optimal_rate[i]
+  AL[i] <- assetlossFun(recovery_rate, damage_fraction, replacement_cost, discount_rate, t)
+  CL[i] <- consumptionlossFun(labour_income,avg_prod_cap, damage_fraction, replacement_cost, recovery_rate, t, discount_rate, total_savings)
+}
+
+# combine all results
+results <- cbind(results, as.data.frame(unlist(AL)),as.data.frame(unlist(CL))) %>% 
+  clean_names()%>% 
+  rename(asset_loss = unlist_al, # final losses here are all discounted (AL, WL, CL..)
+         consumption_loss = unlist_cl)
+
+```
+
+### 3.4 ASSET-WELFARE LOSS RATIO
+
+```{r}
+# if asset loss = 0, utility loss needs to be 0
+results$utility_loss <- ifelse(results$asset_loss == 0, 0, results$utility_loss)
+# same for consumption loss
+results$consumption_loss <- ifelse(results$asset_loss == 0, 0, results$consumption_loss)
+
+results <- results %>% 
+  mutate(ratio = asset_loss/utility_loss)
+
+results <- results %>% 
+  filter(asset_loss != 0) # we don't want to plot this because 0/0 gives us a ratio of NaN
+
+results
+```
+
+## 4. PLOT RESULTS
+
+```{r grid plot - wfl}
+
+ggplot(results, aes(x = income, y = depth, fill = utility_loss)) + 
+  geom_tile() + 
+  scale_fill_gradientn(colors = viridis_pal()(100),
+                       breaks = pretty_breaks(), 
+                       trans = "reverse") +  # Use the viridis color palette, pretty breaks for rounded numbers
+  labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", fill = "Welfare Losses") +
+  theme_bw()+
+  guides(fill = guide_colorbar(reverse = TRUE))
+```
+Here we can see that low income households tend to be most impacted by floods of all depths, having losses that are already very significant at lower flood levels.  
+
+
