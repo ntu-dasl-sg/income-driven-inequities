@@ -45,7 +45,7 @@ ggplot(AAL, aes(x = factor(year), y = sum_loss/1000000, fill = loss_type)) +
   labs(x = "Year", 
        y = "Average Annual Losses (billion PHP)", 
        fill = "Loss type") +
-  scale_fill_manual(values = c("Asset loss" = "#cf5529", "Welfare loss" = "#294475")) +
+  scale_fill_manual(values = c("Asset loss" = "#cf5519", "Welfare loss" = "#294475")) +
   theme_bw()
 ```
 
@@ -79,10 +79,10 @@ AAL_increase
 AAL_increase %>% 
   ggplot(aes(x = loss_type, y = increase/1000000, fill = loss_type))+
   geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = c("Asset loss" = "#cf5529", "Welfare loss" = "#294475")) +
+  scale_fill_manual(values = c("Asset loss" = "#cf5519", "Welfare loss" = "#294475")) +
   theme_bw() +
   labs(x = element_blank(),
-       y = "Increase in avereage annual asset and welfare losses (billion PHP)", 
+       y = "Increase in avereage annual asset and welfare losses\n(billion PHP)", 
        fill = "Loss type")
 ```
 This plot shows the increase in asset losses and welfare losses from 2020 to 2050, where 2050 includes future sea level rise. 
@@ -92,7 +92,7 @@ We can see that the increase in welfare losses is significantly larger than asse
 AAL_increase %>% 
   ggplot(aes(x = loss_type, y = perc_increase, fill = loss_type))+
   geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = c("Asset loss" = "#cf5529", "Welfare loss" = "#294475")) +
+  scale_fill_manual(values = c("Asset loss" = "#cf5519", "Welfare loss" = "#294475")) +
   theme_bw() +
   labs(x = element_blank(),
        y = "% Increase in average annual losses", 
@@ -179,9 +179,9 @@ dt <- data.frame(labour_income = labour_incomes, total_savings = tot_savings)
 dt
 ```
 
-## 3. GET WELFARE LOSSES
+### 2.4. GET WELFARE LOSSES
 
-### 3.1. PREDISASTER CALC
+#### 2.4.1 PREDISASTER CALC
 
 ```{r predisaster}
 predisaster_res <- Map(predisasterFun, labour_incomes, other_incomes, avg_prod_cap, elasticity) 
@@ -201,7 +201,7 @@ predisaster_res <- cbind(tot_savings, predisaster_res) # add total savings colum
 predisaster_res
 ```
 
-### 3.2 OPTIMISE RECOVERY RATES & COMPUTE WELFARE LOSS
+#### 2.4.2 OPTIMISE RECOVERY RATES & COMPUTE WELFARE LOSS
 
 ```{r optimise RR, warning=FALSE, message=FALSE}
 # should just run this in a script
@@ -276,7 +276,7 @@ results <- results %>%
 
 Next, we compute asset and consumption losses. 
 
-### 3.3. COMPUTE ASSET AND CONSUMPTION LOSSES
+#### 2.4.3 COMPUTE ASSET AND CONSUMPTION LOSSES
 
 ```{r AL & CL}
 AL <- c() # empty vector for asset losses
@@ -297,7 +297,7 @@ results <- cbind(results, as.data.frame(unlist(AL)),as.data.frame(unlist(CL))) %
 
 ```
 
-### 3.4 ASSET-WELFARE LOSS RATIO
+#### 2.4.4 ASSET-WELFARE LOSS RATIO
 
 ```{r}
 # if asset loss = 0, utility loss needs to be 0
@@ -314,19 +314,75 @@ results <- results %>%
 results
 ```
 
-## 4. PLOT RESULTS
+### 2.5 PLOT RESULTS
 
 ```{r grid plot - wfl}
-
-ggplot(results, aes(x = income, y = depth, fill = utility_loss)) + 
+results %>% 
+  filter(income <= 650) %>% 
+ggplot(aes(x = income, y = depth, fill = utility_loss)) + 
   geom_tile() + 
   scale_fill_gradientn(colors = viridis_pal()(100),
                        breaks = pretty_breaks(), 
                        trans = "reverse") +  # Use the viridis color palette, pretty breaks for rounded numbers
-  labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", fill = "Welfare Losses") +
+  labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", fill = "Welfare Losses ('000 PHP)") +
   theme_bw()+
   guides(fill = guide_colorbar(reverse = TRUE))
 ```
 Here we can see that low income households tend to be most impacted by floods of all depths, having losses that are already very significant at lower flood levels.  
+```{r grid plot - Al}
+results %>% 
+  filter(income <= 650) %>% 
+ggplot(aes(x = income, y = depth, fill = asset_loss)) + 
+  geom_tile() + 
+  scale_fill_gradientn(colors = viridis_pal()(100),
+                       breaks = pretty_breaks(), 
+                       trans = "reverse") +  # Use the viridis color palette, pretty breaks for rounded numbers
+  labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", fill = "Asset Losses ('000 PHP)") +
+  theme_bw()+
+  guides(fill = guide_colorbar(reverse = TRUE))
+```
 
+```{r grid plot - ALWLratio}
+ggplot(results, aes(x = income, y = depth, fill = asset_loss/utility_loss)) + 
+  geom_tile() + 
+  scale_fill_gradientn(colors = viridis_pal()(100),
+                       breaks = pretty_breaks(), 
+                       trans = "reverse") +  # Use the viridis color palette, pretty breaks for rounded numbers
+  labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", fill = "Asset to welfare loss ratio") +
+  theme_bw()+
+  guides(fill = guide_colorbar(reverse = TRUE))
+
+```
+```{r grid plot - WLALratio}
+ggplot(results, aes(x = income, y = depth, fill = utility_loss/asset_loss)) + 
+  geom_tile() + 
+  scale_fill_gradientn(colors = viridis_pal()(100),
+                       breaks = pretty_breaks(), 
+                       trans = "reverse") +  # Use the viridis color palette, pretty breaks for rounded numbers
+  labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", fill = "Welfare to asset loss ratio") +
+  theme_bw()+
+  guides(fill = guide_colorbar(reverse = TRUE))
+
+```
+
+same as above, trying divergent colors
+
+```{r }
+
+results %>% 
+  filter(income <= 650) %>% 
+ggplot(aes(x = income, y = depth, fill = asset_loss/utility_loss)) + 
+  geom_tile() + 
+  scale_fill_gradient2(
+    low = "#294475",   # low end color
+    mid = "white",  # midpoint color
+    high = "#cf5519",   # high end color
+    midpoint = 1,   # set the midpoint to 1
+    breaks = pretty_breaks(), 
+    name = "Asset to welfare loss ratio"
+  ) +
+  labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", fill = "Asset to welfare loss ratio") +
+  theme_bw() 
+
+```
 

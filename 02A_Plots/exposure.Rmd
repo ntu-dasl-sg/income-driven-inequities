@@ -54,14 +54,14 @@ income_pts <- rasterToPoints(labour_income_rast)
 building_pts <- rasterToPoints(building_rast)
 
 
-# # Check if 'x' and 'y' coordinates are the same for every row
-# coordinates_match <- all.equal(flood_pts[, c("x", "y")], income_pts[, c("x", "y")]) # check building_pts as well. This code cannot compare 3 data frames.
-# 
-# if (is.logical(coordinates_match) && all(coordinates_match)) {
-#   print("Coordinates are the same for every row.")
-# } else {
-#   stop("Coordinates are not the same for every row. Check your data.")
-# }
+# Check if 'x' and 'y' coordinates are the same for every row
+coordinates_match <- all.equal(flood_pts[, c("x", "y")], income_pts[, c("x", "y")]) # check building_pts as well. This code cannot compare 3 data frames.
+
+if (is.logical(coordinates_match) && all(coordinates_match)) {
+  print("Coordinates are the same for every row.")
+} else {
+  stop("Coordinates are not the same for every row. Check your data.")
+}
 head(income_pts)
 ```
 
@@ -314,6 +314,8 @@ data20 <- data20 %>%
 
 data20 # check data20
 ```
+
+
 #### 2.2.1 NATIONAL POVERTY LINE
 
 ```{r national pov line}
@@ -469,7 +471,7 @@ data20 %>%
 
 ### 3.1 Y2050 
 
-```{r cdf 2050}
+```{r cdf 2050 - natl}
 data %>%  
   filter(depth > 0) %>% 
   mutate(income_category = ifelse(income <= pov_line_natl, "Below poverty line", "Above poverty line")) %>% 
@@ -486,12 +488,10 @@ data %>%
 
 In this plot the curve for households at or below the poverty threshold is consistently below that of the curve for households above the poverty line. This suggests that across all observed flood depths, those living at or under the poverty threshold are generally more exposed to coastal floods. The gap between the two curves highlights this inequity in exposure. 
 
-### 3.2 Y2020 
-
-```{r cdf 2020}
-data20 %>%  
+```{r cdf 2050 - intl}
+data %>%  
   filter(depth > 0) %>% 
-  mutate(income_category = ifelse(income <= pov_line_natl, "Below poverty line", "Above poverty line")) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
    ggplot(aes(x=depth, linetype = income_category))+ 
   # stat_ecdf(geom = "step", size = 0.5) +
   geom_smooth(stat = "ecdf", method = "loess", color = "black", se = FALSE, size = 0.5) +  # Apply loess smoothing
@@ -502,3 +502,205 @@ data20 %>%
    scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
   theme_bw()
 ```
+
+The vertical distance between both curves show the difference in cumulative frequency at any given flood depth.
+The larger the gap, the greater the inequality in exposure to that flood depth. 
+
+We therefore want to compute the maximum distance between the two curves. 
+#### 3.1.1 Max vertical dist
+
+```{r}
+low_income <- data %>% 
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  filter(income_category == "Below poverty line") %>% 
+  arrange(depth)
+high_income <- data %>% 
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  filter(income_category == "Above poverty line") %>% 
+  arrange(depth)
+
+
+cdf_low <- ecdf(low_income$depth)
+cdf_high <- ecdf(high_income$depth)
+
+data %>%  
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+   ggplot(aes(x=depth, linetype = income_category))+ 
+  # stat_ecdf(geom = "step", size = 0.5) +
+  geom_smooth(stat = "ecdf", method = "loess", color = "black", se = FALSE, size = 0.5) +  # Apply loess smoothing
+  labs(x = "Flood depth (cm)", 
+       y = "Cumulative frequency", 
+       linetype = "Income category") + 
+  # scale_color_manual(values = c("low income" = "#cf5529", "high income" = "#294475"))+
+   scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  theme_bw() + 
+  geom_vline(xintercept = 124.321, color = "grey", size = 0.5)
+```
+
+```{r}
+depth_values <- seq(min(data$depth), max(data$depth), length.out = 1000)
+differences <- cdf_high(depth_values) - cdf_low(depth_values)
+abs_difference <- abs(differences)
+l1norm50 <- sum(abs_difference)
+cat("L1 Norm:", l1norm50, "\n")
+
+
+max_difference <- max(differences)
+max_difference_depth <- depth_values[which.max(differences)]
+
+
+cat("Maximum Difference:", max_difference, "\n")
+cat("Corresponding Flood Depth:", max_difference_depth, "\n")
+```
+
+
+
+
+
+### 3.2 Y2020 
+
+```{r}
+low_income20 <- data20 %>% 
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  filter(income_category == "Below poverty line") %>% 
+  arrange(depth)
+high_income20 <- data20 %>% 
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  filter(income_category == "Above poverty line") %>% 
+  arrange(depth)
+
+
+cdf_low <- ecdf(low_income20$depth)
+cdf_high <- ecdf(high_income20$depth)
+
+data20 %>%  
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+   ggplot(aes(x=depth, linetype = income_category))+ 
+  # stat_ecdf(geom = "step", size = 0.5) +
+  geom_smooth(stat = "ecdf", method = "loess", color = "black", se = FALSE, size = 0.5) +  # Apply loess smoothing
+  labs(x = "Flood depth (cm)", 
+       y = "Cumulative frequency", 
+       linetype = "Income category") + 
+  # scale_color_manual(values = c("low income" = "#cf5529", "high income" = "#294475"))+
+   scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  theme_bw() 
+```
+
+```{r}
+depth_values <- seq(min(data20$depth), max(data20$depth), length.out = 1000)
+differences <- cdf_high(depth_values) - cdf_low(depth_values)
+l1norm20 <- sum(abs(differences))
+
+l1norm20
+max_difference <- max(differences)
+max_difference_depth <- depth_values[which.max(differences)]
+
+cat("Maximum Difference:", max_difference, "\n")
+cat("Corresponding Flood Depth:", max_difference_depth, "\n")
+```
+
+```{r}
+data <- data %>%
+  mutate(year = rep("2050", nrow(.))) %>% 
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= quantile(income, 0.2, na.rm = TRUE), "Bottom 20%",
+                                  ifelse(income <= quantile(income, 0.4, na.rm = TRUE), "Q2",
+                                         ifelse(income <= quantile(income, 0.6, na.rm = TRUE), "Q3",
+                                                ifelse(income <= quantile(income, 0.8, na.rm = TRUE), "Q4", "Top 20%"))))) %>%
+  mutate(income_category = factor(income_category, levels = c("Top 20%", "Q4", "Q3", "Q2", "Bottom 20%")))
+
+
+data20 <- data20%>%
+  mutate(year = rep("2020", nrow(.))) %>% 
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= quantile(income, 0.2, na.rm = TRUE), "Bottom 20%",
+                                  ifelse(income <= quantile(income, 0.4, na.rm = TRUE), "Q2",
+                                         ifelse(income <= quantile(income, 0.6, na.rm = TRUE), "Q3",
+                                                ifelse(income <= quantile(income, 0.8, na.rm = TRUE), "Q4", "Top 20%"))))) %>%
+  mutate(income_category = factor(income_category, levels = c("Top 20%", "Q4", "Q3", "Q2", "Bottom 20%")))
+
+data_all <- rbind(data, data20)
+
+data_all <- bind_rows(
+  mutate(data_all %>% filter(year == 2020),
+         year = factor(year),
+         color = "#cf5519"),  # Color for 2020
+  mutate(data_all %>% filter(year == 2050),
+         year = factor(year),
+         color = "#294475")  # Color for 2050
+)
+
+data_all %>%
+  filter(depth > 0) %>%
+    mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  ggplot(aes(x = depth, linetype = income_category, color = year)) +
+  geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
+  labs(x = "Flood depth (cm)",
+       y = "Cumulative frequency",
+       linetype = "Income category",
+       color = "Year") +
+  scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  scale_color_manual(values = c("#cf5519", "#294475")) +
+  theme_bw()
+
+
+```
+
+Calculate maximum distance for this curve (), then send to David
+
+Do something similar to welfare loss to look at the difference between
+
+
+## 3.3 COMBINE BOTH YEARS
+
+
+```{r}
+data20_cat <- data20 %>% 
+  filter(depth > 0) %>%
+    mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line"))
+
+data50_cat <- data %>% 
+  filter(depth > 0) %>%
+    mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line"))
+
+# separate categories
+data20_below <- data20_cat %>%  
+  filter(income_category=="Below poverty line") %>% 
+  arrange(depth)
+data50_below <- data50_cat %>%  
+  filter(income_category=="Below poverty line") %>% 
+  arrange(depth)
+
+data20_above<- data20_cat %>%  
+  filter(income_category=="Above poverty line") %>% 
+  arrange(depth)
+data50_above <- data50_cat %>%  
+  filter(income_category=="Above poverty line") %>% 
+  arrange(depth)
+
+
+# Now calculate max diff between the two years for each income category
+cdf_low_20 <- ecdf(data20_below$depth)
+cdf_low_50 <- ecdf(data50_below$depth)
+
+cdf_high_20 <- ecdf(data20_above$depth)
+cdf_high_50 <- ecdf(data50_above$depth)
+
+## Calculate max difference 
+depth_values <- seq(min(data20_below$depth), max(data20_below$depth), length.out = 1000)
+differences <- cdf_low_20(depth_values) - cdf_low_50(depth_values)
+
+
+max_difference <- max(differences)
+max_difference_depth <- depth_values[which.max(differences)]
+
+cat("Maximum Difference:", max_difference, "\n")
+cat("Corresponding Flood Depth:", max_difference_depth, "\n")
+```
+

@@ -1,0 +1,74 @@
+---
+title: "Pixel plot"
+author: "Jeanette Choong"
+date: "2023-11-23"
+output: html_document
+---
+
+```{r libraries, include = F, message = F, echo = F}
+library(raster)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(data.table)
+library(readr)
+library(janitor)
+library(scales)
+library(viridis)
+```
+
+## 1. READ DATA
+
+```{r message = F}
+# read in data
+pixel_data <- read_csv("/Users/jeancjw/Documents/00_Data/pixel plot.csv") %>% 
+  clean_names()
+
+pixel_data
+```
+
+## 2. PLOT RESULTS
+
+```{r wfl 50}
+pixel_data %>% 
+  ggplot(aes(x = wl50, y = exceedance_probability, linetype = income_category)) + 
+  geom_line() + 
+  labs(x = "Welfare Loss ('000 PHP)",
+       y = "Exceedance probability", 
+       linetype = "Income category") + 
+  scale_y_log10() + 
+  theme_bw()
+```
+
+```{r wfl 20}
+pixel_data %>% 
+  ggplot(aes(x = wl20, y = exceedance_probability, linetype = income_category)) + 
+  geom_line() + 
+  labs(x = "Welfare Loss ('000 PHP)",
+       y = "Exceedance probability", 
+       linetype = "Income category") + 
+  scale_y_log10() + 
+  theme_bw()
+```
+
+```{r Al 50}
+pixel_data %>% 
+  ggplot(aes(x = al50, y = exceedance_probability, linetype = income_category)) + 
+  geom_line() + 
+  labs(x = "Asset Loss ('000 PHP)",
+       y = "Exceedance probability", 
+       linetype = "Income category") + 
+  scale_y_log10() + 
+  theme_bw()
+```
+
+```{r Al 20}
+pixel_data %>% 
+  ggplot(aes(x = al20, y = exceedance_probability, linetype = income_category)) + 
+  geom_line() + 
+  labs(x = "Asset Loss ('000 PHP)",
+       y = "Exceedance probability", 
+       linetype = "Income category") + 
+  scale_y_log10() + 
+  theme_bw()
+```
