@@ -20,6 +20,7 @@ library(readr)
 library(janitor)
 library(scales)
 library(viridis)
+library(ggdist)
 ```
 
 
@@ -46,7 +47,8 @@ ggplot(AAL, aes(x = factor(year), y = sum_loss/1000000, fill = loss_type)) +
        y = "Average Annual Losses (billion PHP)", 
        fill = "Loss type") +
   scale_fill_manual(values = c("Asset loss" = "#cf5519", "Welfare loss" = "#294475")) +
-  theme_bw()
+  theme_bw() + 
+  coord_flip()
 ```
 
 ```{r AAL difference}
@@ -108,7 +110,7 @@ We start by loading the constants.
 
 ```{r constants}
 mean_consumption = 313.061 # mean consumption of the entire Philippines
-t = 0:20 # time period after disaster where we want to track recovery
+t = 0:15 # time period after disaster where we want to track recovery
 discount_rate = 0.10 # assume 20%; developing countries usually have rates between 7-25%, higher values reflect greater emphases on immediate needs.
 avg_prod_cap = 0.23 # average productivity of capital, taken from Walsh & Hallegatte (2029)'s paper on the Philippines
 elasticity = 1.5 # 0.5-2.0 in literature, usually 2.2 or 2.5 in welfare loss models
@@ -168,6 +170,10 @@ savings_rates <- seq(10, 150, length.out = length(tot_incomes))
 
 # Calculate actual savings
 tot_savings <- tot_incomes * savings_rates/100
+
+# yearly_savings <- seq(10, 350, length.out = length(tot_incomes))
+# tot_savings <- yearly_savings * 2.9 # assume same savings rates throughout
+
 ```
 
 ### 2.3.1 INCOME-SAVINGS DATA FRAME
@@ -188,9 +194,7 @@ predisaster_res <- Map(predisasterFun, labour_incomes, other_incomes, avg_prod_c
 # returns list containing the result of predisasterFun for each pair of corresponding labour_incomes and other_incomes
 ```
 
-```{r}
-cbind(labour_incomes[15], other_incomes[15], data.frame(predisaster_res[[15]]))
-```
+
 
 ```{r prediaster results}
 predisaster_res <- do.call(rbind, Map(function(labour_income, other_income, predisaster) { 
@@ -204,64 +208,68 @@ predisaster_res
 #### 2.4.2 OPTIMISE RECOVERY RATES & COMPUTE WELFARE LOSS
 
 ```{r optimise RR, warning=FALSE, message=FALSE}
-# should just run this in a script
-labour_income = predisaster_res$labour_income[7]
-total_savings = predisaster_res$tot_savings[7]
-replacement_cost = predisaster_res$replacement_cost[7]
-income0 = predisaster_res$income0[7]
-consumption0 = predisaster_res$consumption0[7]
-utility0 = predisaster_res$utility0[7]
-
 # set range of recovery rates
 lower_bound <- 0
 upper_bound <- 4 # upper bound needs to be adjusted dynamically such that consumption_t > 0 (i.e. utility losses not Inf or NaN)
 
+# Loop over values of i
+results_list <- list()
 
-# Loop over the rows in the data frame
-damage_fractions <- depth_df$df
-
-#initialise results df
-results <- data.frame(damage_fraction = numeric(length(damage_fractions)),
-                      optimal_rate = numeric(length(damage_fractions)), 
-                      utility_loss = numeric(length(damage_fractions)))
-
-# Loop over damage fractions and find optimal rate that minimises utility losses
-for (i in seq_along(damage_fractions)){
-  damage_fraction <- damage_fractions[i]
+for (i in 1:length(predisaster_res$labour_income)) {
+  # should just run this in a script
+  labour_income <- predisaster_res$labour_income[i]
+  total_savings <- predisaster_res$tot_savings[i]
+  replacement_cost <- predisaster_res$replacement_cost[i]
+  income0 <- predisaster_res$income0[i]
+  consumption0 <- predisaster_res$consumption0[i]
+  utility0 <- predisaster_res$utility0[i]
   
-  while (TRUE) {
-    # Define the objective function using the current upper_bound
-    objectiveFun <- function(recovery_rate){
-      welfarelossFun(labour_income, avg_prod_cap, damage_fraction, recovery_rate, t, replacement_cost, discount_rate, total_savings, mean_consumption)
-    }
+  # Loop over the rows in the data frame
+  damage_fractions <- depth_df$df
+  
+  # initialise results df
+  results <- data.frame(damage_fraction = numeric(length(damage_fractions)),
+                        optimal_rate = numeric(length(damage_fractions)), 
+                        utility_loss = numeric(length(damage_fractions)))
+  
+  # Loop over damage fractions and find optimal rate that minimizes utility losses
+  for (j in seq_along(damage_fractions)){
+    damage_fraction <- damage_fractions[j]
     
-    # Perform optimization with the current upper_bound
-    optimal_rate <- optimise(objectiveFun, interval = c(lower_bound, upper_bound))
-    
-    # Calculate welfare losses using the obtained optimal_rate
-    welfare_loss <- objectiveFun(optimal_rate$minimum)
-    
-    # Check if the utility loss is NaN
-    if (!is.nan(welfare_loss)) {
-      results[i,] <- c(damage_fraction, optimal_rate$minimum, welfare_loss)
-      break  # Exit the loop if a valid utility loss is found
-    } else {
-      upper_bound <- upper_bound - 0.01  # Adjust the upper_bound if welfare loss is NaN
-      # cat("Adjusting upper_bound to:", upper_bound, "\n")
+    while (TRUE) {
+      # Define the objective function using the current upper_bound
+      objectiveFun <- function(recovery_rate){
+        welfarelossFun(labour_income, avg_prod_cap, damage_fraction, recovery_rate, t, replacement_cost, discount_rate, total_savings, mean_consumption)
+      }
+      
+      # Perform optimization with the current upper_bound
+      optimal_rate <- optimise(objectiveFun, interval = c(lower_bound, upper_bound))
+      
+      # Calculate welfare losses using the obtained optimal_rate
+      welfare_loss <- objectiveFun(optimal_rate$minimum)
+      
+      # Check if the utility loss is NaN
+      if (!is.nan(welfare_loss)) {
+        results[j,] <- c(damage_fraction, optimal_rate$minimum, welfare_loss)
+        break  # Exit the loop if a valid utility loss is found
+      } else {
+        upper_bound <- upper_bound - 0.01  # Adjust the upper_bound if welfare loss is NaN
+        # cat("Adjusting upper_bound to:", upper_bound, "\n")
+      }
     }
   }
+  
+  # change X in rX to 1-20
+  result_row <- cbind(income = rep(labour_income, length(results$damage_fraction)), results)
+  results_list[[i]] <- result_row
 }
 
-# change X in rX to 1-20
-r7<- cbind(income = rep(labour_income, length (results$damage_fraction)), results)
-
+# Combine the results into a single data frame
+results <- do.call(rbind, results_list)
 ```
 
-Now we combine all results
 
 ```{r bind results}
-# combine all results
-results <- rbind(r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11,r12,r13,r14,r15,r16,r17,r18,r19,r20)
 # join to flood depth
 results <- results %>% 
   left_join(depth_df, by = c("damage_fraction" = "df"))
@@ -295,6 +303,7 @@ results <- cbind(results, as.data.frame(unlist(AL)),as.data.frame(unlist(CL))) %
   rename(asset_loss = unlist_al, # final losses here are all discounted (AL, WL, CL..)
          consumption_loss = unlist_cl)
 
+results
 ```
 
 #### 2.4.4 ASSET-WELFARE LOSS RATIO
@@ -318,61 +327,67 @@ results
 
 ```{r grid plot - wfl}
 results %>% 
-  filter(income <= 650) %>% 
+  filter(income <= 600) %>% 
 ggplot(aes(x = income, y = depth, fill = utility_loss)) + 
-  geom_tile() + 
+  geom_raster() + 
   scale_fill_gradientn(colors = viridis_pal()(100),
                        breaks = pretty_breaks(), 
                        trans = "reverse") +  # Use the viridis color palette, pretty breaks for rounded numbers
-  labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", fill = "Welfare Losses ('000 PHP)") +
+  labs(x = "Income ('000 PHP)", y = "Flood Depth (cm)", fill = "Welfare Losses ('000 PHP)") +
   theme_bw()+
   guides(fill = guide_colorbar(reverse = TRUE))
 ```
 Here we can see that low income households tend to be most impacted by floods of all depths, having losses that are already very significant at lower flood levels.  
 ```{r grid plot - Al}
 results %>% 
-  filter(income <= 650) %>% 
+  filter(income <= 600) %>% 
 ggplot(aes(x = income, y = depth, fill = asset_loss)) + 
-  geom_tile() + 
+  geom_raster() + 
   scale_fill_gradientn(colors = viridis_pal()(100),
                        breaks = pretty_breaks(), 
                        trans = "reverse") +  # Use the viridis color palette, pretty breaks for rounded numbers
-  labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", fill = "Asset Losses ('000 PHP)") +
+  labs(x = "Income ('000 PHP)", y = "Flood Depth (cm)", fill = "Asset Losses ('000 PHP)") +
+  theme_bw()+
+  guides(fill = guide_colorbar(reverse = TRUE))
+```
+
+
+
+
+```{r grid plot - CL}
+results %>% 
+  filter(income <= 600) %>% 
+ggplot(aes(x = income, y = depth, fill = consumption_loss)) + 
+  geom_raster() + 
+  scale_fill_gradientn(colors = viridis_pal()(100),
+                       breaks = pretty_breaks(), 
+                       trans = "reverse") +  # Use the viridis color palette, pretty breaks for rounded numbers
+  labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", fill = "Consumption Losses ('000 PHP)") +
   theme_bw()+
   guides(fill = guide_colorbar(reverse = TRUE))
 ```
 
 ```{r grid plot - ALWLratio}
-ggplot(results, aes(x = income, y = depth, fill = asset_loss/utility_loss)) + 
-  geom_tile() + 
+results %>% 
+ filter(income <= 600) %>% 
+ggplot(aes(x = income, y = depth, fill = ratio)) + 
+  geom_raster() + 
   scale_fill_gradientn(colors = viridis_pal()(100),
                        breaks = pretty_breaks(), 
                        trans = "reverse") +  # Use the viridis color palette, pretty breaks for rounded numbers
   labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", fill = "Asset to welfare loss ratio") +
   theme_bw()+
   guides(fill = guide_colorbar(reverse = TRUE))
-
 ```
-```{r grid plot - WLALratio}
-ggplot(results, aes(x = income, y = depth, fill = utility_loss/asset_loss)) + 
-  geom_tile() + 
-  scale_fill_gradientn(colors = viridis_pal()(100),
-                       breaks = pretty_breaks(), 
-                       trans = "reverse") +  # Use the viridis color palette, pretty breaks for rounded numbers
-  labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", fill = "Welfare to asset loss ratio") +
-  theme_bw()+
-  guides(fill = guide_colorbar(reverse = TRUE))
 
-```
 
 same as above, trying divergent colors
 
-```{r }
-
+```{r}
 results %>% 
-  filter(income <= 650) %>% 
+  filter(income <= 600) %>% 
 ggplot(aes(x = income, y = depth, fill = asset_loss/utility_loss)) + 
-  geom_tile() + 
+  geom_raster() + 
   scale_fill_gradient2(
     low = "#294475",   # low end color
     mid = "white",  # midpoint color
@@ -381,8 +396,52 @@ ggplot(aes(x = income, y = depth, fill = asset_loss/utility_loss)) +
     breaks = pretty_breaks(), 
     name = "Asset to welfare loss ratio"
   ) +
-  labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", fill = "Asset to welfare loss ratio") +
+  labs(x = "Income ('000 PHP)", y = "Flood Depth (cm)", fill = "Asset to welfare loss ratio") +
   theme_bw() 
 
+```
+#### 2.5.2 Contour plots
+```{r contour al}
+# results %>%
+#   filter(income <= 650) %>%
+#   ggplot(aes(x = income, y = depth, z = asset_loss, color = ..level..)) +
+#   geom_contour(aes(fill = stat(level))) +
+#   # geom_contour_filled(aes(fill = as.numeric(stat(level)))) +  # Convert level to numeric
+#   scale_color_gradientn(colors = viridis_pal()(100),
+#                        breaks = pretty_breaks(),
+#                        trans = "reverse") +
+#   labs(x = "Income ('000 PHP)", y = "Flood Depth (m)", color = "Welfare Losses ('000 PHP)") +
+#   theme_light() +
+#   guides(color = guide_colorbar(reverse = TRUE))
+
+results %>% 
+  filter(income <= 600) %>% 
+  ggplot(aes(x = income, y = depth, z = asset_loss)) + 
+  geom_contour_filled() + 
+  scale_fill_viridis_d(direction = -1) +
+  labs(x = "Income ('000 PHP)", y = "Flood Depth (cm)", fill = "Asset Losses ('000 PHP)") +
+  theme_bw()
+
+
+```
+
+```{r contour wfl}
+results %>% 
+  filter(income <=650) %>% 
+  ggplot(aes(x = income, y = depth, z =utility_loss)) + 
+  geom_contour_filled() + 
+  scale_fill_viridis_d(direction = -1) +
+  labs(x = "Income ('000 PHP)", y = "Flood Depth (cm)", fill = "Welfare Losses ('000 PHP)") +
+  theme_bw()
+```
+
+```{r contour al-wfl ratio}
+results %>% 
+  filter(income <= 600) %>% 
+  ggplot(aes(x = income, y = depth, z = asset_loss/utility_loss)) + 
+  geom_contour_filled() + 
+  scale_fill_viridis_d(direction = -1) +
+  labs(x = "Income ('000 PHP)", y = "Flood Depth (cm)", fill = "Asset to Welfare Loss Ratio") +
+  theme_bw()
 ```
 

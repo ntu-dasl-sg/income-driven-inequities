@@ -657,6 +657,22 @@ Calculate maximum distance for this curve (), then send to David
 Do something similar to welfare loss to look at the difference between
 
 
+```{r without inequity}
+data_all %>%
+  filter(depth > 0) %>%
+    mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>%
+  filter(year == "2050") %>%
+  ggplot(aes(x = depth, color = income_category)) +
+  geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
+  labs(x = "Flood depth (cm)",
+       y = "Cumulative frequency") +
+  # scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  scale_color_manual(values = c("white", "black")) +
+  theme_bw()
+ 
+```
+
+
 ## 3.3 COMBINE BOTH YEARS
 
 
