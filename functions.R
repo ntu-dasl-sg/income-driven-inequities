@@ -245,3 +245,4 @@ welfarelossFun <- function(labour_income, avg_prod_cap, damage_fraction, recover
   
   return(welfare_losses)
 }
+

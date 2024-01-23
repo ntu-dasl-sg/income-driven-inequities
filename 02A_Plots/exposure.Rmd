@@ -673,7 +673,7 @@ data_all %>%
 ```
 
 
-## 3.3 COMBINE BOTH YEARS
+### 3.3 COMBINE BOTH YEARS
 
 
 ```{r}
@@ -715,6 +715,528 @@ differences <- cdf_low_20(depth_values) - cdf_low_50(depth_values)
 
 max_difference <- max(differences)
 max_difference_depth <- depth_values[which.max(differences)]
+
+cat("Maximum Difference:", max_difference, "\n")
+cat("Corresponding Flood Depth:", max_difference_depth, "\n")
+```
+
+## 4. PLOT ASSET LOSSES
+
+```{r}
+# LOAD DATA
+AL_rast_20 <- raster("/Users/jeancjw/Documents/03_Results/Rasters/PH/merged/AL_Y2020_RP100.tif") # for year 2020
+AL_rast_50 <- raster("/Users/jeancjw/Documents/03_Results/Rasters/PH/merged/AL_Y2050_RP100.tif") # year 2050
+
+```
+
+```{r}
+# Get pixels where there are buildings
+AL_rast_20[is.na(building_rast)] <- NA
+AL_rast_50[is.na(building_rast)] <- NA
+labour_income_rast[is.na(building_rast)] <- NA
+
+
+# Convert rasters to points 
+AL20_pts <- rasterToPoints(AL_rast_20)
+AL50_pts <- rasterToPoints(AL_rast_50)
+income_pts <- rasterToPoints(labour_income_rast)
+building_pts <- rasterToPoints(building_rast)
+
+# Check if 'x' and 'y' coordinates are the same for every row
+coordinates_match <- all.equal(AL50_pts[, c("x", "y")], AL20_pts[, c("x", "y")]) # check building_pts as well. This code cannot compare 3 data frames.
+
+if (is.logical(coordinates_match) && all(coordinates_match)) {
+  print("Coordinates are the same for every row.")
+} else {
+  stop("Coordinates are not the same for every row. Check your data.")
+}
+```
+
+The coordinates for each row are all the same for Year 2050 but not 2020. For 2020, we need to use merge to combine the columns together, but for 2050, cbind will do. 
+
+```{r}
+# 2020 asset losses
+data_AL20 <- merge(AL20_pts, income_pts, by = c("x", "y")) # merge asset loss with income
+
+data_AL20 <- merge(data_AL20, building_pts, by = c("x", "y")) # merge with buildings
+
+data_AL20 <- data_AL20 %>%
+  rename(asset_loss = layer.x,
+         income = layer.y, 
+         num_buildings = layer)
+
+data_AL20
+```
+```{r}
+# 2050 asset losses
+data_AL50 <- merge(AL50_pts, income_pts, by = c("x", "y")) # merge asset loss with income
+
+data_AL50 <- merge(data_AL50, building_pts, by = c("x", "y")) # merge with buildings
+
+data_AL50 <- data_AL50 %>%
+  rename(asset_loss = layer.x,
+         income = layer.y, 
+         num_buildings = layer)
+
+data_AL50
+```
+
+Now we want to expand the data frame such that each row represents one building.
+
+
+```{r}
+data_AL20 <- data_AL20 %>%
+  select(-x, -y) %>% 
+  slice(rep(row_number(), num_buildings)) %>% # replicate rows based on number of households
+  select(-num_buildings) 
+
+data_AL20
+```
+```{r}
+data_AL50 <- data_AL50 %>%
+  select(-x, -y) %>% 
+  slice(rep(row_number(), num_buildings)) %>% # replicate rows based on number of households
+  select(-num_buildings) 
+
+data_AL50 
+```
+```{r}
+data_AL20 %>
+```
+
+Now we compute the inequity in asset losses expereienced by households of various incomes in the Philippines, under a 1-in-100 year coastal flood in 2020.
+
+```{r}
+data_AL20 %>%  
+  filter(asset_loss > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+   ggplot(aes(x=asset_loss, linetype = income_category))+ 
+  # stat_ecdf(geom = "step", size = 0.5) +
+  geom_smooth(stat = "ecdf", method = "loess", color = "black", se = FALSE, size = 0.5) +  # Apply loess smoothing
+  labs(x = "Asset losses ('000 PHP)", 
+       y = "Cumulative frequency", 
+       linetype = "Income category") + 
+  # scale_color_manual(values = c("low income" = "#cf5529", "high income" = "#294475"))+
+   scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  theme_bw()
+```
+
+We do the same for 2050.
+```{r}
+data_AL50 %>%  
+  filter(asset_loss > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+   ggplot(aes(x=asset_loss, linetype = income_category))+ 
+  # stat_ecdf(geom = "step", size = 0.5) +
+  geom_smooth(stat = "ecdf", method = "loess", color = "black", se = FALSE, size = 0.5) +  # Apply loess smoothing
+  labs(x = "Asset losses ('000 PHP)", 
+       y = "Cumulative frequency", 
+       linetype = "Income category") + 
+  # scale_color_manual(values = c("low income" = "#cf5529", "high income" = "#294475"))+
+   scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  theme_bw()
+```
+
+## 5. PLOT WELFARE LOSSES
+```{r}
+# LOAD DATA
+WL_rast_20 <- raster("/Users/jeancjw/Documents/03_Results/Rasters/PH/merged/WL_Y2020_RP100.tif") # for year 2020
+WL_rast_50 <- raster("/Users/jeancjw/Documents/03_Results/Rasters/PH/merged/WL_Y2050_RP100.tif") # year 2050
+
+```
+
+```{r}
+# Get pixels where there are buildings
+WL_rast_20[is.na(building_rast)] <- NA
+WL_rast_50[is.na(building_rast)] <- NA
+labour_income_rast[is.na(building_rast)] <- NA
+
+
+# Convert rasters to points 
+WL20_pts <- rasterToPoints(WL_rast_20)
+WL50_pts <- rasterToPoints(WL_rast_50)
+income_pts <- rasterToPoints(labour_income_rast)
+building_pts <- rasterToPoints(building_rast)
+
+# Check if 'x' and 'y' coordinates are the same for every row
+coordinates_match <- all.equal(WL50_pts[, c("x", "y")], WL20_pts[, c("x", "y")]) # check building_pts as well. This code cannot compare 3 data frames.
+
+if (is.logical(coordinates_match) && all(coordinates_match)) {
+  print("Coordinates are the same for every row.")
+} else {
+  stop("Coordinates are not the same for every row. Check your data.")
+}
+```
+
+The coordinates for each row are all the same for Year 2050 but not 2020. For 2020, we need to use merge to combine the columns together, but for 2050, cbind will do. 
+
+```{r}
+# 2020 asset losses
+data_WL20 <- merge(WL20_pts, income_pts, by = c("x", "y")) # merge asset loss with income
+
+data_WL20 <- merge(data_WL20, building_pts, by = c("x", "y")) # merge with buildings
+
+data_WL20 <- data_WL20 %>%
+  rename(asset_loss = layer.x,
+         income = layer.y, 
+         num_buildings = layer)
+
+data_WL20
+```
+
+```{r}
+# 2050 asset losses
+data_WL50 <- merge(WL50_pts, income_pts, by = c("x", "y")) # merge asset loss with income
+
+data_WL50 <- merge(data_WL50, building_pts, by = c("x", "y")) # merge with buildings
+
+data_WL50 <- data_WL50 %>%
+  rename(asset_loss = layer.x,
+         income = layer.y, 
+         num_buildings = layer)
+
+data_WL50
+```
+
+Now we want to expand the data frame such that each row represents one building.
+
+
+```{r}
+data_WL20 <- data_WL20 %>%
+  select(-x, -y) %>% 
+  slice(rep(row_number(), num_buildings)) %>% # replicate rows based on number of households
+  select(-num_buildings) 
+
+data_WL20
+```
+
+```{r}
+data_WL50 <- data_WL50 %>%
+  select(-x, -y) %>% 
+  slice(rep(row_number(), num_buildings)) %>% # replicate rows based on number of households
+  select(-num_buildings) 
+
+data_WL50 
+```
+
+Now we compute the inequity in asset losses expereienced by households of various incomes in the Philippines, under a 1-in-100 year coastal flood in 2020.
+
+```{r}
+data_WL20 %>%  
+  filter(asset_loss > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+   ggplot(aes(x=asset_loss, linetype = income_category))+ 
+  # stat_ecdf(geom = "step", size = 0.5) +
+  geom_smooth(stat = "ecdf", method = "loess", color = "black", se = FALSE, size = 0.5) +  # Apply loess smoothing
+  labs(x = "Welfare losses ('000 PHP)", 
+       y = "Cumulative frequency", 
+       linetype = "Income category") + 
+  # scale_color_manual(values = c("low income" = "#cf5529", "high income" = "#294475"))+
+   scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  theme_bw()
+```
+
+We do the same for 2050.
+```{r}
+data_WL50 %>%  
+  filter(asset_loss > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+   ggplot(aes(x=asset_loss, linetype = income_category))+ 
+  # stat_ecdf(geom = "step", size = 0.5) +
+  geom_smooth(stat = "ecdf", method = "loess", color = "black", se = FALSE, size = 0.5) +  # Apply loess smoothing
+  labs(x = "Welfare losses ('000 PHP)", 
+       y = "Cumulative frequency", 
+       linetype = "Income category") + 
+  # scale_color_manual(values = c("low income" = "#cf5529", "high income" = "#294475"))+
+   scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  theme_bw()
+```
+
+## 6. Combine ASSET & WELFARE loss
+
+```{r}
+# categorise data
+data_AL20 <- data_AL20 %>% 
+  mutate(loss_category = "Asset loss", 
+         year = "2020")%>% 
+  rename(losses = asset_loss)
+data_AL50 <- data_AL50 %>% 
+  mutate(loss_category = "Asset loss", 
+         year = "2050")%>% 
+  rename(losses = asset_loss)
+data_WL20 <- data_WL20 %>% 
+  mutate(loss_category = "Welfare loss", 
+         year = "2020")%>% 
+  rename(losses = asset_loss)
+
+data_WL50 <- data_WL50 %>% 
+  mutate(loss_category = "Welfare loss", 
+         year = "2050") %>% 
+  rename(losses = asset_loss)
+
+```
+
+```{r}
+loss_data_20 <- rbind(data_AL20, data_WL20)
+loss_data_20 <- bind_rows(mutate(loss_data_20 %>% 
+                   filter(loss_category == "Asset loss"),
+                 loss_category = factor(loss_category), 
+                 colour = "#cf5519"),
+          mutate(loss_data_20 %>% 
+                   filter(loss_category == "Welfare loss"), 
+                 loss_category = factor(loss_category),
+                 colour = "#294475"))
+
+```
+
+```{r}
+loss_data_50 <- rbind(data_AL50, data_WL50)
+loss_data_50 <- bind_rows(mutate(loss_data_50 %>% 
+                   filter(loss_category == "Asset loss"),
+                 loss_category = factor(loss_category), 
+                 colour = "#cf5519"),
+          mutate(loss_data_50 %>% 
+                   filter(loss_category == "Welfare loss"), 
+                 loss_category = factor(loss_category),
+                 colour = "#294475"))
+
+```
+
+### 6.1 Year 2020
+```{r}
+loss_data_20 %>%
+  filter(losses > 0) %>%
+  ggplot(aes(x = losses, color = loss_category)) +
+  geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
+  labs(x = "Losses ('000 PHP)",
+       y = "Cumulative frequency",
+       linetype = "Income category",
+       color = "Loss type") +
+  # scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  scale_color_manual(values = c("#cf5519", "#294475")) +
+  theme_bw()
+```
+
+Asset vs welfare losses, not differentiated by income. 
+
+```{r}
+loss_data_20 %>%
+  filter(losses > 0) %>%
+    mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  ggplot(aes(x = losses, linetype = income_category, color = loss_category)) +
+  geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
+  labs(x = "Losses ('000 PHP)",
+       y = "Cumulative frequency",
+       linetype = "Income category",
+       color = "Loss type") +
+  scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  scale_color_manual(values = c("#cf5519", "#294475")) +
+  theme_bw()
+```
+Here, we observe that for those below the poverty line, asset losses are very few. 
+
+```{r}
+loss_data_50 %>% 
+  filter(losses > 0) %>%
+    mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  filter(income_category == "Below poverty line") %>% 
+  ggplot(aes(x = losses, linetype = income_category, color = loss_category)) +
+  geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
+  labs(x = "Losses ('000 PHP)",
+       y = "Cumulative frequency",
+       linetype = "Income category",
+       color = "Loss type") +
+  scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  scale_color_manual(values = c("#cf5519", "#294475")) +
+  theme_bw()
+```
+
+### 6.2 Year 2050
+
+```{r}
+loss_data_50 %>%
+  filter(losses > 0) %>%
+    mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  ggplot(aes(x = losses, linetype = income_category, color = loss_category)) +
+  geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
+  labs(x = "Losses ('000 PHP)",
+       y = "Cumulative frequency",
+       linetype = "Income category",
+       color = "Loss type") +
+  scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  scale_color_manual(values = c("#cf5519", "#294475")) +
+  theme_bw()
+```
+
+```{r}
+loss_data_50 %>% 
+  filter(losses > 0) %>%
+    mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  filter(income_category == "Below poverty line") %>% 
+  ggplot(aes(x = losses, linetype = income_category, color = loss_category)) +
+  geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
+  labs(x = "Losses ('000 PHP)",
+       y = "Cumulative frequency",
+       linetype = "Income category",
+       color = "Loss type") +
+  scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  scale_color_manual(values = c("#cf5519", "#294475")) +
+  theme_bw()
+```
+```{r}
+loss_data_50 %>% 
+  filter(losses > 0) %>%
+    mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  filter(income_category == "Above poverty line") %>% 
+  ggplot(aes(x = losses, linetype = income_category, color = loss_category)) +
+  geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
+  labs(x = "Losses ('000 PHP)",
+       y = "Cumulative frequency",
+       linetype = "Income category",
+       color = "Loss type") +
+  scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  scale_color_manual(values = c("#cf5519", "#294475")) +
+  theme_bw()
+```
+## 7. Effect of SLR
+### 7.1 Asset losses
+
+Compare AL 2020 and 2050; WL 2020 and 2050
+
+```{r}
+asset_loss_data <- rbind(data_AL50, data_AL20)
+asset_loss_data  <- bind_rows(mutate(asset_loss_data %>% 
+                   filter(year == "2020"),
+                 year = factor(year), 
+                 colour = "#cf5519"),
+          mutate(asset_loss_data %>% 
+                   filter(year == "2050"),
+                  year = factor(year), 
+                 colour = "#294475"))
+
+asset_loss_data
+```
+```{r}
+welfare_loss_data <- rbind(data_WL50, data_WL20)
+welfare_loss_data  <- bind_rows(mutate(welfare_loss_data %>% 
+                   filter(year == "2020"),
+                 year = factor(year), 
+                 colour = "#cf5519"),
+          mutate(welfare_loss_data %>% 
+                   filter(year == "2050"),
+                  year = factor(year), 
+                 colour = "#294475"))
+
+welfare_loss_data
+```
+
+
+```{r}
+asset_loss_data %>%
+  filter(losses > 0) %>%
+    # mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  ggplot(aes(x = losses, 
+             # linetype = income_category, 
+             color = year)) +
+  geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
+  labs(x = "Losses ('000 PHP)",
+       y = "Cumulative frequency",
+       # linetype = "Income category",
+       color = "Year") +
+  # scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  scale_color_manual(values = c("#cf5519", "#294475")) +
+  theme_bw()
+```
+
+```{r}
+asset_loss_data %>%
+  filter(losses > 0) %>%
+    mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>%
+  ggplot(aes(x = losses, 
+             linetype = income_category,
+             color = year)) +
+  geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
+  labs(x = "Losses ('000 PHP)",
+       y = "Cumulative frequency",
+       linetype = "Income category",
+       color = "Year") +
+  scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  scale_color_manual(values = c("#cf5519", "#294475")) +
+  theme_bw()
+```
+### 6.2 COMPARE WELFARE LOSSES (BY YEAR)
+
+Welfare losses are generally more pronounced in 2050 than in 2020.
+
+```{r}
+welfare_loss_data %>%
+  filter(losses > 0) %>%
+    # mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  ggplot(aes(x = losses, 
+             # linetype = income_category, 
+             color = year)) +
+  geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
+  labs(x = "Losses ('000 PHP)",
+       y = "Cumulative frequency",
+       # linetype = "Income category",
+       color = "Year") +
+  # scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  scale_color_manual(values = c("#cf5519", "#294475")) +
+  theme_bw()
+```
+
+
+
+```{r}
+welfare_loss_data %>%
+  filter(losses > 0) %>%
+    mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>%
+  ggplot(aes(x = losses, 
+             linetype = income_category,
+             color = year)) +
+  geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
+  labs(x = "Losses ('000 PHP)",
+       y = "Cumulative frequency",
+       linetype = "Income category",
+       color = "Year") +
+  scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  scale_color_manual(values = c("#cf5519", "#294475")) +
+  theme_bw()
+```
+However, when we view this based on income groups, we can see that those living below the international poverty threshold will experience a larger difference in welfare losses due to sea level rise. 
+
+We confirm these findings by computing the maximum vertical distance between the solid lines, and the max vertical distance between the dotted lines. 
+
+#### 6.1.3 Maximum vertical distance
+
+
+
+```{r}
+welfare_loss_data_low %>% 
+  filter(losses > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  filter(income_category == "Below poverty line") %>% 
+  arrange(depth)
+high_income20 <- data20 %>% 
+  filter(depth > 0) %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  filter(income_category == "Above poverty line") %>% 
+  arrange(depth)
+
+
+cdf_low <- ecdf(low_income20$depth) # compute cdf values for the households below poverty line
+cdf_high <- ecdf(high_income20$depth) # compute cdf values for the households above poverty line
+
+depth_values <- seq(min(data$depth), max(data$depth), length.out = 1000)
+differences <- cdf_high(depth_values) - cdf_low(depth_values)
+abs_difference <- abs(differences)
+l1norm50 <- sum(abs_difference)
+cat("L1 Norm:", l1norm50, "\n")
+
+
+max_difference <- max(differences)
+max_difference_depth <- depth_values[which.max(differences)]
+
 
 cat("Maximum Difference:", max_difference, "\n")
 cat("Corresponding Flood Depth:", max_difference_depth, "\n")

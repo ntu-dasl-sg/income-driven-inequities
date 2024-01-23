@@ -22,8 +22,8 @@ apply_ead <- function(raster_list, with_buildings, building_rast, loss_type, til
   writeRaster(loss, filename = paste0(path, sep1, loss_type, sep2, tilename, sep2, year, ".tif"), format = "GTiff", overwrite = TRUE)
 }
 
-loss_type <- "WL"
-year <- "Y2020"
+loss_type <- "CL"
+year <- "Y2050"
 tile.list <- read_csv("00_Data/Coastal flood maps/Philippines/PH File list.csv")$latlong
 
 for (tilename in tile.list) {

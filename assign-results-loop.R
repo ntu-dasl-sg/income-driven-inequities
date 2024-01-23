@@ -8,7 +8,7 @@ library(rlang)
 setwd("/Users/jeancjw/Documents")
 year <- "Y2020"
 tile.list <- read_csv("00_Data/Coastal flood maps/Philippines/PH File list.csv")$latlong
-# RP.list <- c("RP1", "RP10", "RP100", "RP1000", "RP10000", "RP2", "RP2000", "RP25", "RP250", "RP5", "RP50", "RP500")
+RP.list <- c("RP1", "RP10", "RP100", "RP1000", "RP10000", "RP2", "RP2000", "RP25", "RP250", "RP5", "RP50", "RP500")
 
 # load regions
 regions <- c("ARMM", "CAR", "NCR", "I", "II", "III", "IVA", "IVB", "IX", "V", "VI", "VII", "VIII", "X", "XI", "XII", "XIII")
@@ -25,6 +25,10 @@ combined_res <- rbindlist(lapply(regions, function(region) { # for the entire Ph
 # Round damage fraction and labour income
 combined_res$damage_fraction <- round(combined_res$damage_fraction, 4) 
 combined_res$lab_income <- round(combined_res$lab_income, 3) # 3 dp because the values are in 000's
+
+# compute consumption post disaster
+combined_res <- combined_res %>% 
+  mutate(new_consumption = consumption0 - consumption_loss) # note that there are negative consumption values, highlighing bankruptcy. 
 
 
 for (tile in seq_along(tile.list)){
@@ -86,21 +90,46 @@ for (tile in seq_along(tile.list)){
     final_results <- final_results[!is.na(final_results$region_id),] # remove NAs (rows/pixels that are in the sea)
     
     # Assign losses
-    asset_loss_rast <- df_rast
-    asset_loss_rast[] <- NA # initialise empty raster w same extent and resolution as df_rast
-    asset_loss_rast <- rasterize(cbind(final_results$x, final_results$y), asset_loss_rast, field = final_results$asset_loss) # assign asset loss values to raster
-    writeRaster(asset_loss_rast, 
-                filename = paste0(pathname, "AL", sep2, tilename, sep2, year, sep2, return_period, ".tif"),
-                format = "GTiff",
-                overwrite = TRUE) # results are asset losses assuming each pixel has a building
+    # asset_loss_rast <- df_rast
+    # asset_loss_rast[] <- NA # initialise empty raster w same extent and resolution as df_rast
+    # asset_loss_rast <- rasterize(cbind(final_results$x, final_results$y), asset_loss_rast, field = final_results$asset_loss) # assign asset loss values to raster
+    # writeRaster(asset_loss_rast, 
+    #             filename = paste0(pathname, "AL", sep2, tilename, sep2, year, sep2, return_period, ".tif"),
+    #             format = "GTiff",
+    #             overwrite = TRUE) # results are asset losses assuming each pixel has a building
+    # 
+    # welfare_loss_rast <- df_rast
+    # welfare_loss_rast[] <- NA # initialise empty raster w same extent and resolution as df_rast
+    # welfare_loss_rast <- rasterize(cbind(final_results$x, final_results$y), welfare_loss_rast, field = final_results$welfare_loss) # assign welfare loss values to raster
+    # writeRaster(welfare_loss_rast, 
+    #             filename = paste0(pathname, "WL", sep2, tilename, sep2, year, sep2, return_period, ".tif"),
+    #             format = "GTiff",
+    #             overwrite = TRUE) # results are welfare losses assuming each pixel has one building
     
-    welfare_loss_rast <- df_rast
-    welfare_loss_rast[] <- NA # initialise empty raster w same extent and resolution as df_rast
-    welfare_loss_rast <- rasterize(cbind(final_results$x, final_results$y), welfare_loss_rast, field = final_results$welfare_loss) # assign welfare loss values to raster
-    writeRaster(welfare_loss_rast, 
-                filename = paste0(pathname, "WL", sep2, tilename, sep2, year, sep2, return_period, ".tif"),
-                format = "GTiff",
-                overwrite = TRUE) # results are welfare losses assuming each pixel has one building
+    consumption_loss_rast <- df_rast
+    consumption_loss_rast[] <- NA # initialise empty raster w same extent and resolution as df_rast
+    consumption_loss_rast <- rasterize(cbind(final_results$x, final_results$y), consumption_loss_rast, field = final_results$consumption_loss) # assign consumption loss values to raster
+    writeRaster(consumption_loss_rast, 
+                filename = paste0(pathname, "CL", sep2, tilename, sep2, year, sep2, return_period, ".tif"),
+                format = "GTiff", 
+                overwrite = TRUE)
+    
+    consumption_rast <- df_rast
+    consumption_rast[] <- NA # initialise empty raster w same extent and resolution as df_rast
+    consumption_rast <- rasterize(cbind(final_results$x, final_results$y), consumption_rast, field = final_results$new_consumption) # assign consumption loss values to raster
+    writeRaster(consumption_rast, 
+                filename = paste0(pathname, "C", sep2, tilename, sep2, year, sep2, return_period, ".tif"),
+                format = "GTiff", 
+                overwrite = TRUE)
+    
+    consumption0_rast <- df_rast
+    consumption0_rast[] <- NA # initialise empty raster w same extent and resolution as df_rast
+    consumption0_rast <- rasterize(cbind(final_results$x, final_results$y), consumption0_rast, field = final_results$consumption0) # assign consumption loss values to raster
+    writeRaster(consumption0_rast, 
+                filename = paste0(pathname, "C0", sep2, tilename, sep2, year, sep2, return_period, ".tif"),
+                format = "GTiff", 
+                overwrite = TRUE)
+    
   }
 }
 
