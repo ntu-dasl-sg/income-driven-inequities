@@ -363,22 +363,29 @@ flooded_data_2020
 flooded_data_2020 <- flooded_data_2020 %>% 
   arrange(flood_depths, -income)
 
-flooded_data_2020
+flooded_data_2020 <- flooded_data_2020 %>% 
+  mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line"))
 
+
+flooded_data_2020
 ```
 
 #### 2.1.1 Make lorenz curve data
 ```{r}
 lorenz_flood_20 <-data.frame(
   cum_perc_households = seq(0, 100, length.out = length(flooded_data_2020$income)),
-  cum_flood = cumsum(flooded_data_2020$flood_depths) / sum(flooded_data_2020$flood_depths)*100)
+  cum_flood = cumsum(flooded_data_2020$flood_depths) / sum(flooded_data_2020$flood_depths)*100, 
+  income = flooded_data_2020$income,
+  income_category = flooded_data_2020$income_category)
 
 lorenz_flood_20
 ```
 
 #### 2.1.2 Plot Lorenz curve for flood in 2020
+
 ```{r}
-ggplot(lorenz_flood_20, aes(x = cum_perc_households , y = cum_flood)) +
+lorenz_flood_20 %>% 
+ggplot(aes(x = cum_perc_households , y = cum_flood)) +
   geom_ribbon(aes(ymin = pmin(cum_perc_households, cum_flood), 
                   ymax = pmax(cum_perc_households, cum_flood)), 
               fill = "lightblue", 
@@ -390,6 +397,52 @@ ggplot(lorenz_flood_20, aes(x = cum_perc_households , y = cum_flood)) +
   theme_bw() + 
   scale_x_continuous(limits = c(0, 100), expand = c(0.008, 0)) +
   scale_y_continuous(limits = c(0, 100), expand = c(0, 0))
+```
+
+#### 2.1.3 Splitting Lorenz curve by pov line
+```{r}
+## Splitting of lorenz curves 
+flooded_data_2020 # already includes the income categorisation
+
+## Split into two income groups
+flooded_data_2020_BPov <- flooded_data_2020 %>% 
+  filter(income_category == "Below poverty line") # below poverty line only
+
+flooded_data_2020_APov <- flooded_data_2020 %>% 
+  filter(income_category == "Above poverty line") # below poverty line only
+
+## Make Lorenz curve data
+
+lorenz_BPov <- data.frame(
+  cum_perc_hh = seq(0,100, length.out = length(flooded_data_2020_BPov$income)),
+  cum_flood = cumsum(flooded_data_2020_BPov$flood_depths_20) / sum(flooded_data_2020_BPov$flood_depths_20) * 100,
+  income = flooded_data_2020_BPov$income,
+  income_category = flooded_data_2020_BPov$income_category
+)
+
+lorenz_APov <- data.frame(
+  cum_perc_hh = seq(0,100, length.out = length(flooded_data_2020_APov$income)),
+  cum_flood = cumsum(flooded_data_2020_APov$flood_depths_20) / sum(flooded_data_2020_APov$flood_depths_20) * 100,
+  income = flooded_data_2020_APov$income,
+  income_category = flooded_data_2020_APov$income_category
+)
+
+## Plot Lorenz Curve
+ggplot() + 
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black") +
+  geom_line(data = lorenz_APov,
+            aes(x = cum_perc_hh, y = cum_flood),
+            color = "#EB6134") +
+  geom_line(data = lorenz_BPov, 
+            aes(x = cum_perc_hh, y = cum_flood),
+            color = "#294475",
+            linewidth = 0.6) + 
+  labs(x = "Cumulative share of households (%) in order of decreasing income",
+                                 y = "Cumulative share of flooding (%)") +
+  theme_bw() +
+  scale_x_continuous(limits = c(0, 100), expand = c(0.01, 0)) +
+  scale_y_continuous(limits = c(0, 100), expand = c(0, 0)) 
+
 ```
 
 
@@ -446,6 +499,9 @@ lorenz_data_20 <-data.frame(
 
 lorenz_data_20
 ```
+
+####
+
 
 For 2050
 ```{r}

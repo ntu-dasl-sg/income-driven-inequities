@@ -743,7 +743,7 @@ income_pts <- rasterToPoints(labour_income_rast)
 building_pts <- rasterToPoints(building_rast)
 
 # Check if 'x' and 'y' coordinates are the same for every row
-coordinates_match <- all.equal(AL50_pts[, c("x", "y")], AL20_pts[, c("x", "y")]) # check building_pts as well. This code cannot compare 3 data frames.
+coordinates_match <- all.equal(income_pts[, c("x", "y")], AL50_pts[, c("x", "y")]) # check building_pts as well. This code cannot compare 3 data frames.
 
 if (is.logical(coordinates_match) && all(coordinates_match)) {
   print("Coordinates are the same for every row.")
@@ -800,9 +800,7 @@ data_AL50 <- data_AL50 %>%
 
 data_AL50 
 ```
-```{r}
-data_AL20 %>
-```
+
 
 Now we compute the inequity in asset losses expereienced by households of various incomes in the Philippines, under a 1-in-100 year coastal flood in 2020.
 
@@ -859,7 +857,7 @@ income_pts <- rasterToPoints(labour_income_rast)
 building_pts <- rasterToPoints(building_rast)
 
 # Check if 'x' and 'y' coordinates are the same for every row
-coordinates_match <- all.equal(WL50_pts[, c("x", "y")], WL20_pts[, c("x", "y")]) # check building_pts as well. This code cannot compare 3 data frames.
+coordinates_match <- all.equal(WL50_pts[, c("x", "y")], income_pts[, c("x", "y")]) # check building_pts as well. This code cannot compare 3 data frames.
 
 if (is.logical(coordinates_match) && all(coordinates_match)) {
   print("Coordinates are the same for every row.")
@@ -891,7 +889,7 @@ data_WL50 <- merge(WL50_pts, income_pts, by = c("x", "y")) # merge asset loss wi
 data_WL50 <- merge(data_WL50, building_pts, by = c("x", "y")) # merge with buildings
 
 data_WL50 <- data_WL50 %>%
-  rename(asset_loss = layer.x,
+  rename(welfare_loss = layer.x,
          income = layer.y, 
          num_buildings = layer)
 
@@ -912,7 +910,7 @@ data_WL20
 
 ```{r}
 data_WL50 <- data_WL50 %>%
-  select(-x, -y) %>% 
+  select(-x, -y) %>%
   slice(rep(row_number(), num_buildings)) %>% # replicate rows based on number of households
   select(-num_buildings) 
 
@@ -939,9 +937,9 @@ data_WL20 %>%
 We do the same for 2050.
 ```{r}
 data_WL50 %>%  
-  filter(asset_loss > 0) %>% 
+  filter(welfare_loss> 0) %>% 
   mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
-   ggplot(aes(x=asset_loss, linetype = income_category))+ 
+   ggplot(aes(x=welfare_loss, linetype = income_category))+ 
   # stat_ecdf(geom = "step", size = 0.5) +
   geom_smooth(stat = "ecdf", method = "loess", color = "black", se = FALSE, size = 0.5) +  # Apply loess smoothing
   labs(x = "Welfare losses ('000 PHP)", 
@@ -960,10 +958,12 @@ data_AL20 <- data_AL20 %>%
   mutate(loss_category = "Asset loss", 
          year = "2020")%>% 
   rename(losses = asset_loss)
+
 data_AL50 <- data_AL50 %>% 
   mutate(loss_category = "Asset loss", 
          year = "2050")%>% 
   rename(losses = asset_loss)
+
 data_WL20 <- data_WL20 %>% 
   mutate(loss_category = "Welfare loss", 
          year = "2020")%>% 
@@ -971,10 +971,15 @@ data_WL20 <- data_WL20 %>%
 
 data_WL50 <- data_WL50 %>% 
   mutate(loss_category = "Welfare loss", 
-         year = "2050") %>% 
-  rename(losses = asset_loss)
+         year = "2050") 
+
+
 
 ```
+
+
+
+### 6.1 Year 2020
 
 ```{r}
 loss_data_20 <- rbind(data_AL20, data_WL20)
@@ -989,20 +994,7 @@ loss_data_20 <- bind_rows(mutate(loss_data_20 %>%
 
 ```
 
-```{r}
-loss_data_50 <- rbind(data_AL50, data_WL50)
-loss_data_50 <- bind_rows(mutate(loss_data_50 %>% 
-                   filter(loss_category == "Asset loss"),
-                 loss_category = factor(loss_category), 
-                 colour = "#cf5519"),
-          mutate(loss_data_50 %>% 
-                   filter(loss_category == "Welfare loss"), 
-                 loss_category = factor(loss_category),
-                 colour = "#294475"))
 
-```
-
-### 6.1 Year 2020
 ```{r}
 loss_data_20 %>%
   filter(losses > 0) %>%
@@ -1036,22 +1028,66 @@ loss_data_20 %>%
 Here, we observe that for those below the poverty line, asset losses are very few. 
 
 ```{r}
-loss_data_50 %>% 
+loss_data_20 %>%
   filter(losses > 0) %>%
     mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
-  filter(income_category == "Below poverty line") %>% 
-  ggplot(aes(x = losses, linetype = income_category, color = loss_category)) +
+  filter(income_category == 
+           "Below poverty line") %>% 
+  ggplot(aes(x = losses, color = loss_category)) +
   geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
   labs(x = "Losses ('000 PHP)",
        y = "Cumulative frequency",
        linetype = "Income category",
-       color = "Loss type") +
-  scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+       color = "Loss type",
+       title = "Asset and welfare losses for households below poverty line") +
+  # scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
   scale_color_manual(values = c("#cf5519", "#294475")) +
   theme_bw()
 ```
 
+
+```{r}
+loss_data_20 %>%
+  filter(losses > 0) %>%
+    mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
+  filter(income_category == 
+           "Above poverty line") %>% 
+  ggplot(aes(x = losses, color = loss_category)) +
+  geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
+  labs(x = "Losses ('000 PHP)",
+       y = "Cumulative frequency",
+       linetype = "Income category",
+       color = "Loss type",
+       title = "Asset and welfare losses for households abovepoverty line") +
+  # scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+  scale_color_manual(values = c("#cf5519", "#294475")) +
+  theme_bw()
+```
+
+
+
 ### 6.2 Year 2050
+
+```{r}
+data_WL50 <- data_WL50 %>% rename(losses = welfare_loss)
+
+data_WL50
+```
+
+
+```{r}
+loss_data_50 <- rbind(data_AL50, data_WL50)
+loss_data_50 <- bind_rows(mutate(loss_data_20 %>% 
+                   filter(loss_category == "Asset loss"),
+                 loss_category = factor(loss_category), 
+                 colour = "#cf5519"),
+          mutate(loss_data_20 %>% 
+                   filter(loss_category == "Welfare loss"), 
+                 loss_category = factor(loss_category),
+                 colour = "#294475"))
+
+loss_data_50
+```
 
 ```{r}
 loss_data_50 %>%
@@ -1073,16 +1109,20 @@ loss_data_50 %>%
   filter(losses > 0) %>%
     mutate(income_category = ifelse(income <= pov_line_intl, "Below poverty line", "Above poverty line")) %>% 
   filter(income_category == "Below poverty line") %>% 
-  ggplot(aes(x = losses, linetype = income_category, color = loss_category)) +
+  ggplot(aes(x = losses, 
+             # linetype = income_category, 
+             color = loss_category)) +
   geom_smooth(stat = "ecdf", method = "loess", se = F, size = 0.5) +
   labs(x = "Losses ('000 PHP)",
        y = "Cumulative frequency",
        linetype = "Income category",
-       color = "Loss type") +
-  scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
+       color = "Loss type", 
+       title = "Losses experienced by households below poverty line") +
+  # scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
   scale_color_manual(values = c("#cf5519", "#294475")) +
   theme_bw()
 ```
+
 ```{r}
 loss_data_50 %>% 
   filter(losses > 0) %>%
@@ -1093,7 +1133,8 @@ loss_data_50 %>%
   labs(x = "Losses ('000 PHP)",
        y = "Cumulative frequency",
        linetype = "Income category",
-       color = "Loss type") +
+       color = "Loss type", 
+       title = "Losses experienced by households above poverty line") +
   scale_linetype_manual(values = c("Below poverty line" = "dashed", "Above poverty line" = "solid")) +
   scale_color_manual(values = c("#cf5519", "#294475")) +
   theme_bw()
@@ -1164,7 +1205,7 @@ asset_loss_data %>%
   scale_color_manual(values = c("#cf5519", "#294475")) +
   theme_bw()
 ```
-### 6.2 COMPARE WELFARE LOSSES (BY YEAR)
+### 7.2 COMPARE WELFARE LOSSES (BY YEAR)
 
 Welfare losses are generally more pronounced in 2050 than in 2020.
 
