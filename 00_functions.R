@@ -65,7 +65,7 @@ predisasterFun <- function(labour_income, other_income, avg_prod_cap, elasticity
   replacement_cost = market_value * 0.9 # Replacement cost is usually lower than the market value of a home. Where land is scarce, the value of 0.9 will be smaller. Building replacement cost.  
   # Huizinga et al. (2017) provides a country-level replacement cost, but not all houses have the same replacement value. 
   
-  housing_income <- replacement_cost * avg_prod_cap # non-monetary benefit generated from living in a house
+  housing_income <- replacement_cost * avg_prod_cap # non-monetary benefit generated from living in a house, estimated at 0.23 (https://github.com/walshb1/resilience_indicator_phl/blob/master/socio_economic_capacity.ipynb)
   
   # Pre-disaster income 
   income0 <- labour_income + housing_income + other_income

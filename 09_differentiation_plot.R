@@ -107,7 +107,7 @@ mean_consumption <- 312.8738
 building_count=1
 
 fd = c(1,0.50,0.15) # i.e. low income more exposed
-v =  c(0.40736842,0.306376815,0.073527273)# assume diff vulnerability
+v =  c(0.607894737,0.306376815,0.073527273)# assume diff vulnerability
 labour_income = c(106.88544,351.54315,888.8834) 
 other_income = c(32.2758,79.7895,367.66809)
 total_savings = c(27.51473,438.7233,1636.1378)
@@ -117,7 +117,7 @@ WL = c(803.5650, 293.4928, 72.00007) # from df_vuln
 df5 <-  data.frame(HH=c("Low","Middle", "High"),
                    Losses = WL,
                    cat= rep("Well-being losses", 3))
-
+df5
 
 ### Combine all dfs ###
 
