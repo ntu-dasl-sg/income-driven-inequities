@@ -83,68 +83,39 @@ utilityFun <- function(consumption, elasticity) {
 }
 
 
+##### 3.3 WELL-BEING LOSSES #####
 
-
-
-
-##### 3.2 PRE-DISASTER INCOME, CONSUMPTION & UTILITY CALCULATIONS #####
-# Measures: 
-## 1) Replacement cost of buildings (replacement_cost)
-## 2) Pre-disaster household income (income0)
-## 3) Pre-disaster household consumption (consumption0)
-## 4) Pre-disaster utility levels (utility0)
-
-predisasterFun <- function(labour_income, other_income, avg_prod_cap, elasticity){
-  market_value = 2.08*labour_income - 0.000056 # Derived by fitting a line through two points (lowest and highest income hh)
-  replacement_cost = market_value * 0.9 # where land is scarce, this will be smaller. Building replacement cost. Instead of using the building replacement cost from the global dmg fn, we tag the cost to the hh income through market value of the home. 
+wlFun <- function(labour_income, other_income, avg_prod_cap, damage_fraction, total_savings, recovery_rate, t, elasticity, discount_rate, mean_consumption){
   
-  housing_income <- replacement_cost * avg_prod_cap # non-monetary income generated from living in a house
+  ###### 3.3.1 PRE-DISASTER INCOME, CONSUMPTION & UTILITY #####
+  market_value = 3.089 * labour_income + 0.492  # estimated based on 20-year mortgage repayment period, 8.5% fixed 20-year interest rate 
+  replacement_cost = market_value * 0.9  # Replacement cost is typically lower than market value
   
-  # Pre-disaster income 
+  # Non-monetary benefit generated from having a house to live in
+  housing_income <- replacement_cost * avg_prod_cap
+  
+  # Pre-disaster income
   income0 <- labour_income + housing_income + other_income
   
-  # Pre-diaster consumption 
-  mortgage <- labour_income * 0.10 # Average household spends about 10% of income on mortgage according to the FIES, 2018 housing affordability report
+  # Pre-disaster consumption
+  mortgage <- labour_income * 0.10  # Average household spends 10% on mortgage
   consumption0 <- income0 - mortgage
   
   # Pre-disaster utility
   utility0 <- utilityFun(consumption0, elasticity)
   
-  return(list(replacement_cost = replacement_cost,
-              income0 = income0,
-              consumption0 = consumption0,
-              utility0 = utility0))
-}
-
-#### 5. ASSET LOSS FUNCTION ####
-
-assetlossFun <- function(recovery_rate, damage_fraction, replacement_cost, discount_rate, t){
-  #initialise empty vectors
-  reconstruction_cost_t <- c()
-  disc_asset_losses_t <- c()
-  
-  for(i in 1:length(t)){
-    reconstruction_cost_t[i] <- recovery_rate * damage_fraction * replacement_cost * exp(-recovery_rate * t[i])
-    disc_asset_losses_t[i] <- reconstruction_cost_t[i] * exp(-discount_rate*t[i])
-  }
-  
-  # total discounted asset losses
-  total_asset_losses <- sum(disc_asset_losses_t)
-  return(total_asset_losses)
-}
-
-#### 8. WELFARE LOSS FUNCTION ####
-
-welfarelossFun <- function(labour_income, avg_prod_cap, damage_fraction, recovery_rate, t, replacement_cost, discount_rate, total_savings, mean_consumption){
-  # yearly labour income losses
+  ###### 3.3.1 PRE-DISASTER INCOME LOSSES, CONSUMPTION LOSSES #####
+ 
+  # Estimated annual income losses
+  ## Note: We conducted a sensitivity analysis on the these proportions and found that changing the percentage loss affected the magnitude of losses but the relative differences remained roughly the same (See supp info)
   labour_income_losses <- c(rep(0, length(t)))
   labour_income_losses[1] <-  0.8 * damage_fraction * labour_income # we assume hh lose a large portion of their labour income in the year of disaster, proportional to damage fraction
   labour_income_losses[2] <- 0.3 * damage_fraction * labour_income # in the subsequent year, they lose less
   
-  # total income and income losses at time t
-  alternative_housing_cost <- c()
-  income_losses_t <- c()
-  income_t <- c()
+  # Get total household income and income losses at each time step (t)
+  alternative_housing_cost <- c() # Cost of finding alternative housing
+  income_losses_t <- c() # Income losses at time, t
+  income_t <- c() # Income at time, t
   
   for(i in 1:length(t)){
     alternative_housing_cost[i] <- avg_prod_cap * replacement_cost * exp(-recovery_rate * t[i])
@@ -152,33 +123,35 @@ welfarelossFun <- function(labour_income, avg_prod_cap, damage_fraction, recover
     income_t[i] <- income0 - income_losses_t[i]
   }
   
-  # CONSUMPTION LOSSES WITHOUT SAVINGS 
-  reconstruction_cost_t <- c()
-  disc_asset_losses_t <- c()
-  consumption_losses_t <- c()
+  # Get consumption losses before the use of savings
+  reconstruction_cost_t <- c() # In this model, this is equivalent to the asset losses
+  disc_asset_losses_t <- c() # We discount these losses over time
+  consumption_losses_t <- c() 
   
   for(i in 1:length(t)){
-    reconstruction_cost_t[i] <- recovery_rate * damage_fraction * replacement_cost * exp(-recovery_rate * t[i]) # asset losses
-    disc_asset_losses_t[i] <- reconstruction_cost_t[i] * exp(-discount_rate*t[i]) # discounted asset losses
-    consumption_losses_t[i] <- income_losses_t[i] + reconstruction_cost_t[i] 
+    reconstruction_cost_t[i] <- recovery_rate * damage_fraction * replacement_cost * exp(-recovery_rate * t[i]) # Also Asset Losses
+    disc_asset_losses_t[i] <- reconstruction_cost_t[i] * exp(-discount_rate*t[i]) # Discounted asset losses 
+    consumption_losses_t[i] <- income_losses_t[i] + reconstruction_cost_t[i] # Consumption losses over time
   }
   
-  # total consumption losses w/o savings, not discounted
+  # Total discounted asset losses
+  total_asset_losses <- sum(disc_asset_losses_t) 
+  #return(total_asset_losses) # Use this value for the total asset losses.
+
+  # Total consumption losses before considering savings (not discounted because of the next step)
   total_consumption_losses <- sum(consumption_losses_t)
-  # total discounted asset losses
-  total_asset_losses <- sum(disc_asset_losses_t)
-  
-  # CONSUMPTION LOSSES WITH SAVINGS
-  ## find savings available
+
+  # Consumption Losses after considering savings
+  ## Get available savings
   savings_available <- rep(0, length(t)) # initialise empty vector to save results
   savings_available[1] <- total_savings
   
   for(i in 1:length(t)){
-    savings_available[i+1] <- max(savings_available[i] - consumption_losses_t[i], 0)# find savings available at each time step; if negative, replace w/ 0 as savings cannot be negative. 
+    savings_available[i+1] <- max(savings_available[i] - consumption_losses_t[i], 0) # find savings available at each time step; if negative, replace w/ 0 as savings cannot be negative. 
   }
   savings_available <- savings_available[-length(savings_available)] # remove last element because it's beyond the 20 year time step (due to prev step)
   
-  ## compute consumption losses considering savings and discount rate
+  ## Compute consumption losses considering savings and discount rate
   new_consumption_losses_t <- c() # consumption loss after taking into account savings
   disc_consumption_losses_t <- c() # discounted consumption losses after taking into account savings
   savings_offset_t <- savings_available - consumption_losses_t
@@ -191,28 +164,28 @@ welfarelossFun <- function(labour_income, avg_prod_cap, damage_fraction, recover
   }
   
   ## savings used up
-  savings_used <- ifelse(total_savings <= total_consumption_losses, # we calculate this because a drop in savings also has impact on wellbeing.
+  savings_used <- ifelse(total_savings <= total_consumption_losses, # we calculate this because a drawing on savings reduces well-being
                          total_savings,
                          total_consumption_losses)
   
-  # total discounted consumption losses w/ savings
+  # Total discounted consumption losses w/ savings
   total_disc_consumption_losses <- sum(disc_consumption_losses_t) + savings_used 
   
-  # consumption at time, t
+  # Consumption at time, t
   consumption_t <- consumption0 - new_consumption_losses_t # need to use the non-discounted one because we are going to discount utility loss later
   
-  # utility losses at time, t
+  # Utility losses at time, t
   utility_t <- utilityFun(consumption_t, elasticity)
   disc_utility_losses_t <- (utility0 - utility_t) * exp(-discount_rate*t) # discounted utility losses at time t
   
-  # total discounted utility losses
+  # Total discounted utility losses
   total_utility_losses <- sum(disc_utility_losses_t) + savings_used * consumption0^(-elasticity)
   
-  # total welfare losses 
-  ## also utility losses converted to monetary value
-  ## and welfare losses wrt the household with the mean consumption 
-  welfare_losses <- total_utility_losses/(mean_consumption^(-elasticity)) # equivalent consumption loss of the average household is the welfare loss
+  # Total well-being (welfare) losses (utility losses converted to an 'equivalent consumption' in monetary terms)
+  ## Also the well-being loss with respect to the household with the mean consumption 
+  welfare_losses <- total_utility_losses/(mean_consumption^(-elasticity)) # equivalent consumption loss of the average household is the well-being loss
   
   return(welfare_losses)
 }
+
 
