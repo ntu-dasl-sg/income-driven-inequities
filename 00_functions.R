@@ -104,7 +104,7 @@ wlFun <- function(labour_income, other_income, avg_prod_cap, damage_fraction, to
   # Pre-disaster utility
   utility0 <- utilityFun(consumption0, elasticity)
   
-  ###### 3.3.1 PRE-DISASTER INCOME LOSSES, CONSUMPTION LOSSES #####
+  ###### 3.3.2 POST-DISASTER INCOME LOSSES, CONSUMPTION LOSSES #####
  
   # Estimated annual income losses
   ## Note: We conducted a sensitivity analysis on the these proportions and found that changing the percentage loss affected the magnitude of losses but the relative differences remained roughly the same (See supp info)
