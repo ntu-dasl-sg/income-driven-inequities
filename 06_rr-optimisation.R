@@ -1,15 +1,14 @@
 #######################
 ### RR OPTIMISATION ###
 #########################
-### VERSION 6, 04 APR ###
-#########################
 
-# Reconstruction/recovery rates are optimised here such that well-being losses are minimised.
-# This code solves for recovery rates + well-being losses, then uses recovery rates to compute asset losses
+## Code Description:
+## Recovery rates are optimised here such that well-being losses are minimised.
+## This code solves for recovery rates + well-being losses, then uses recovery rates to compute asset losses
 
 # Variables to change: filepath / FIES.data / save path at end to province or municipality + 17 (mun) / 87 (province)
 
-source("D:/Jeanette/02_Code/00_functions.R")
+source("~/00_functions.R") # replace with actual filepath to functions
 
 # Load libraries
 library(dplyr)
@@ -33,13 +32,13 @@ elasticity = 1.5 # 0.5-2.0 in literature, usually 1.2 or 1.5 in welfare loss mod
 building_count = 1 # one household
 
 # Read income and savings data from FIES
-# filepath <- list.files(path = "D:/Jeanette/00_Data/FIES 2021/PROVINCE_IES/",
+# filepath <- list.files(path = "replace with file paths to csvs containing income and savings distributions for province",
 #                        pattern = ".csv",
 #                        full.names = T)
 # 
 # FIES.data <- lapply(filepath, read_csv) # read in indiv csv files for provinces
 # # 
-filepath <- list.files(path = "D:/Jeanette/00_Data/FIES 2021/MUNICIPALITY_IES/",
+filepath <- list.files(path = "replace with file paths to csvs containing income and savings distributions for HUC/municipality",
                        pattern = ".csv",
                        full.names = T)
 
@@ -48,13 +47,13 @@ FIES.data <- lapply(filepath, read_csv) # read in indiv csv files for municipali
 
 
 # # Read in damage fractions and save all unique values [RUN ONCE ONLY]
-# df20.list <- list.files(path="D:/Jeanette/00_Data/Damage Fraction/diff_vuln/2020",
+# df20.list <- list.files(path="replace with path to damage fraction maps (2020)",
 #                                pattern = ".tif$",
 #                                full.names = T)
 # 
 # df20_rasters <- lapply(df20.list, raster)
 # 
-# df50.list <- list.files(path="D:/Jeanette/00_Data/Damage Fraction/diff_vuln/2050",
+# df50.list <- list.files(path="replace with path to damage fraction maps (2050)",
 #                                pattern = ".tif$",
 #                                full.names = T)
 # 
@@ -238,7 +237,7 @@ for (provinceID in seq_along(province_results)) {
   province_data <- province_results[[provinceID]]
   
   # Define the file name with underscores instead of spaces
-  path <- "D:/Jeanette/03_Results/diff_vuln/MUNICIPALITY/" # CHANGE TO PROVINCE OR MUNICIPALITY
+  path <- "replace with output path" # Repeat for province/HUC
   filename <- paste0(path,"results_", province, ".csv")
   
   # Write data to CSV
