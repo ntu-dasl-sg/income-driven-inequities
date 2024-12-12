@@ -85,6 +85,10 @@ FIES.data <- lapply(filepath, read_csv) # read in indiv csv files for municipali
 # df.vals <- union(all_unique_values, all_unique_values50)
 
 
+#################################
+#### OPTIMISE RECOVERY RATES ####
+#################################
+
 # compute results
 province_names <- tools::file_path_sans_ext(basename(filepath)) # get province names
 province_names <- gsub("_avg_IES", "", province_names) # remove "_avg_IES" from names (only for PROVINCE)
@@ -197,8 +201,9 @@ compute_losses <- function(df) {
   return(df)
 }
 
-
-# ASSET AND CONSUMPTION LOSSES
+######################################
+#### ASSET AND CONSUMPTION LOSSES ####
+######################################
 
 for(provinceID in seq_along(combined_results)){
   province <- province_names[[provinceID]]
