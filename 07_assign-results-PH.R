@@ -1,4 +1,10 @@
+
+##################################
 ### Assign results to rasters ####
+##################################
+
+# Code description: Assign calculated asset and well-being losses to rasters.
+
 library(readr)
 library(raster)
 library(dplyr)
@@ -8,14 +14,14 @@ library(dplyr)
 
 
 # read in results from RR optimisation (provinces)
-filepaths <- list.files(path = "D:/Jeanette/03_Results/diff_vuln/PROVINCE/", 
+filepaths <- list.files(path = "path to results for provinces (assigned in optimisation step)", 
                         pattern = ".csv$",
                         full.names = T)
 results <- lapply(filepaths, read_csv)
 
 
 # read in results for RR optimisation (municipalities/HUCs)
-filepaths_mun <- list.files(path = "D:/Jeanette/03_Results/diff_vuln/MUNICIPALITY/", 
+filepaths_mun <- list.files(path = "path to results for HUCs (assigned in optimisation step)", 
                         pattern = ".csv$",
                         full.names = T)
 results_mun <- lapply(filepaths_mun, read_csv)
@@ -36,7 +42,7 @@ combined_results <- combined_results %>%
 
 
 # define tilenames
-tilenames <- tools::file_path_sans_ext(list.files(path = "D:/Jeanette/00_Data/Damage Fraction/diff_vuln/2020/",
+tilenames <- tools::file_path_sans_ext(list.files(path = "~/00_Data/Damage Fraction/diff_vuln/2020/", # to get tilenames 
            pattern = "RP1.tif"))
 
 tilenames <- gsub("_Y2020_RP1", "", tilenames)
@@ -48,13 +54,13 @@ RP.list <- c("RP1","RP10", "RP100", "RP1000", "RP10000", "RP2", "RP2000","RP25",
 
 
 # Read labour income raster
-income_PH <- raster("D:/Jeanette/00_Data/FIES 2021/rasters/labour_income_PH.tif") 
+income_PH <- raster("replace with labour income raster path for the Philippines") 
 
 
 for (i in 1:length(tilenames)){ # tile 2,9 empty
     tile <- tilenames[[i]]
 
-  df_list <- list.files(path = "D:/Jeanette/00_Data/Damage Fraction/diff_vuln/2020", # CHANGE YEAR
+  df_list <- list.files(path = "replace with path to damage fraction rasters", # CHANGE YEAR
                         pattern = tile,
                         full.names = T)
   df_rasters <- lapply(df_list, raster) # list of 12 return periods
@@ -126,14 +132,14 @@ for (i in 1:length(tilenames)){ # tile 2,9 empty
   for (RP in 1:length(AL_list)) {
     return_period <- RP.list[[RP]]
     asset_loss_rast <- AL_list[[RP]]
-    writeRaster(asset_loss_rast, filename = paste0("D:/Jeanette/03_Results/diff_vuln/RASTERS/2020/AL/AL_", tile,"_Y2020_", return_period, ".tif"), format = "GTiff", overwrite = TRUE)
+    writeRaster(asset_loss_rast, filename = paste0("output filepath to save asset loss rasters", tile,"_Y2020_", return_period, ".tif"), format = "GTiff", overwrite = TRUE)
   }
   
   # Save each individual raster from WL_list
   for (RP in 1:length(WL_list)) {
     return_period <- RP.list[[RP]]
     welfare_loss_rast <- WL_list[[RP]]
-    writeRaster(welfare_loss_rast, filename = paste0("D:/Jeanette/03_Results/diff_vuln/RASTERS/2020/WL/WL_", tile,"_Y2020_", return_period, ".tif"), format = "GTiff", overwrite = TRUE)
+    writeRaster(welfare_loss_rast, filename = paste0("output filepath to save well-being loss rasters", tile,"_Y2020_", return_period, ".tif"), format = "GTiff", overwrite = TRUE)
     
   }
   
